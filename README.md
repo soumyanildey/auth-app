@@ -1,6 +1,3 @@
-Absolutely — below is a **professional `README.md`** showing only **what you have actually done**, with **no assumptions**. The sections are clearly separated, and all **code and bash commands** are in distinct blocks.
-
----
 
 ````markdown
 # Auth_App
