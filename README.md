@@ -1,4 +1,4 @@
-# Comprehensive Authorization App --- Built for plug and play via RESTful API endpoints.
+# Comprehensive Authorization App --- Built for plug and play via RESTful API Endpoints.
 
 ````markdown
 
@@ -17,7 +17,7 @@ Auth_App is a Django-based authentication system. It includes user registration,
 
 ---
 
-More features still coming...currently in active development
+More features still coming...currently in Active Development
 ````
 ## Project Setup Instructions
 
