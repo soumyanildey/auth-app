@@ -16,7 +16,7 @@ Auth_App is a Django-based authentication system. It includes user registration,
 - Local Docker PostgreSQL container setup for development and testing
 
 ---
-
+````
 ## Project Setup Instructions
 
 ### 1. Clone the Repository
@@ -24,7 +24,7 @@ Auth_App is a Django-based authentication system. It includes user registration,
 ```bash
 git clone https://github.com/your-username/Auth_App.git
 cd Auth_App
-````
+```
 
 ---
 
