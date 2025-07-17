@@ -10,9 +10,8 @@ Auth_App is a Django-based authentication system. It includes user registration,
 - Role-based access control (RBAC)
 - Email verification via OTP
 - Secure password change (via OTP or current password)
-- PostgreSQL as the database backend
+- PostgreSQL(hosted) as the database backend
 - Poetry as the dependency and environment manager
-- `.gitignore` respected for environment files and virtual envs
 - Local Docker PostgreSQL container setup for development and testing
 
 ---
