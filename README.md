@@ -1,6 +1,7 @@
+# Comprehensive Authorization App --- Built for plug and play via RESTful API endpoints.
 
 ````markdown
-# Auth_App
+
 
 Auth_App is a Django-based authentication system. It includes user registration, login, role-based access, email OTP verification, password reset, and secure authentication using JWT.
 
@@ -15,6 +16,8 @@ Auth_App is a Django-based authentication system. It includes user registration,
 - Local Docker PostgreSQL container setup for development and testing
 
 ---
+
+More features still coming...currently in active development
 ````
 ## Project Setup Instructions
 
