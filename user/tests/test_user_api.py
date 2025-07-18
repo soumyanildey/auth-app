@@ -294,7 +294,7 @@ class PrivateTestCase(TestCase):
 
         self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn('email', res.data)
-        print(res.data['email'])
+        # print(res.data['email'])
 
     def test_password_change_rejection(self):
         '''Test for password change req rejection'''
@@ -305,4 +305,4 @@ class PrivateTestCase(TestCase):
 
         self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn('password', res.data)
-        print(res.data['password'])
+        # print(res.data['password'])

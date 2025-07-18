@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.utils.translation import gettext_lazy as _
-from .models import CustomUser
+from .models import CustomUser,EmailOTP
 
 
 @admin.register(CustomUser)
@@ -71,3 +71,11 @@ class CustomUserAdmin(BaseUserAdmin):
             ),
         }),
     )
+
+
+@admin.register(EmailOTP)
+class EmailOTPAdmin(admin.ModelAdmin):
+    list_display = ('user', 'new_email', 'otp', 'created_at')
+    list_filter = ('created_at',)
+    search_fields = ('user__username', 'new_email', 'otp')
+    readonly_fields = ('created_at',)

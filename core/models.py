@@ -2,7 +2,8 @@ from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.utils import timezone
 from datetime import timedelta
-
+import uuid,datetime
+from Authentication_App.settings import AUTH_USER_MODEL
 
 class CustomUserManager(BaseUserManager):
     '''User Model Manager'''
@@ -97,3 +98,18 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     def get_full_name(self):
         return self.fname + " " + self.lname
 
+
+class EmailOTP(models.Model):
+    '''Model for Email OTP Verification'''
+    user = models.ForeignKey(AUTH_USER_MODEL, on_delete=models.CASCADE)
+    new_email = models.EmailField()
+    otp = models.CharField(max_length=6)
+    attempts = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+    def is_otp_expired(self):
+        return timezone.now() > self.created_at + datetime.timedelta(minutes=10)
+
+    class Meta:
+        ordering = ['-created_at']

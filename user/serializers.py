@@ -6,6 +6,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 class UserSerializer(serializers.ModelSerializer):
     '''User API Serializers'''
     password2 = serializers.CharField(write_only=True, min_length=5)
@@ -15,8 +16,8 @@ class UserSerializer(serializers.ModelSerializer):
         fields = ['email', 'password', 'password2', 'fname', 'lname', 'phone']
         extra_kwargs = {'password': {'write_only': True, 'min_length': 5}}
 
-    def __init__(self,*args,**kwargs):
-        super().__init__(*args,**kwargs)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         if self.instance:
             self.fields['email'].read_only = True
             self.fields['password'].read_only = True
@@ -47,22 +48,26 @@ class UserSerializer(serializers.ModelSerializer):
         if self.instance:
             # Warn if tampered input tries to update password/email
             if 'email' in self.initial_data:
-                logger.warning(f"User {self.instance.pk} attempted to update email via profile update.")
-                raise serializers.ValidationError({'email': _('Email update is not allowed here.')})
+                logger.warning(
+                    f"User {self.instance.pk} attempted to update email via profile update.")
+                raise serializers.ValidationError(
+                    {'email': _('Email update is not allowed here.')})
 
             if 'password' in self.initial_data or 'password2' in self.initial_data:
-                logger.warning(f"User {self.instance.pk} attempted to update password via profile update.")
-                raise serializers.ValidationError({'password': _('Password update is not allowed here.')})
+                logger.warning(
+                    f"User {self.instance.pk} attempted to update password via profile update.")
+                raise serializers.ValidationError(
+                    {'password': _('Password update is not allowed here.')})
         else:
             # Create mode: validate passwords match
             password = data.get('password')
             password2 = data.get('password2')
 
             if password != password2:
-                raise serializers.ValidationError({'password2': _('Passwords do not match!')})
+                raise serializers.ValidationError(
+                    {'password2': _('Passwords do not match!')})
 
         return data
-
 
     def create(self, validated_data):
         '''Creates the user object and return it with encrypted password'''
@@ -90,3 +95,12 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
 
 class LogoutSerializer(serializers.Serializer):
     refresh = serializers.CharField()
+
+
+class EmailOTPRequestSerializer(serializers.Serializer):
+    new_email = serializers.EmailField()
+
+
+class EmailOTPConfirmSerializer(serializers.Serializer):
+    new_email = serializers.EmailField()
+    otp = serializers.CharField(max_length=6)

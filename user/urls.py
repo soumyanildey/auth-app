@@ -10,5 +10,8 @@ urlpatterns = [
     path('admin/',views.AdminUserView.as_view(),name='admin'),
     path('superadmin/',views.SuperAdminUserView.as_view(),name='superadmin'),
     path('logout/',views.LogoutView.as_view(),name='logout'),
+    path('request-email-otp/', views.RequestEmailOTPView.as_view(), name='request-email-otp'),
+    path('verify-email-otp/', views.ConfirmEmailOTPView.as_view(), name='verify-email-otp'),
+
 
 ]
