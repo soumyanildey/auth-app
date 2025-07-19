@@ -17,9 +17,7 @@ from django.utils import timezone
 import datetime
 from django.db import transaction
 import secrets
-from .utils import generate_and_send_otp,validate_otp
-
-
+from .utils import generate_and_send_otp, validate_otp
 
 
 class CreateUserView(generics.CreateAPIView):
@@ -27,9 +25,10 @@ class CreateUserView(generics.CreateAPIView):
     serializer_class = UserSerializer
 
     def perform_create(self, serializer):
-        user = serializer.save(is_email_verified=False)  # User active by default, email needs verification
-        generate_and_send_otp(user, user.email, subject="Verify Your Email", purpose="registration")
-
+        # User active by default, email needs verification
+        user = serializer.save(is_email_verified=False)
+        generate_and_send_otp(
+            user, user.email, subject="Verify Your Email", purpose="registration")
 
 
 class UpdateUserView(generics.RetrieveUpdateAPIView):
@@ -107,11 +106,11 @@ class RequestEmailOTPView(APIView):
                 if recent_count >= 3:
                     return Response({'error': 'Too many requests. Try again later.'}, status=429)
 
-                generate_and_send_otp(request.user, new_email, subject="Change Email OTP", purpose="change_email")
+                generate_and_send_otp(
+                    request.user, new_email, subject="Change Email OTP", purpose="change_email")
 
             return Response({'message': 'OTP sent to new E-Mail'}, status=200)
         return Response(serializer.errors, status=400)
-
 
 
 class ConfirmEmailOTPView(APIView):
@@ -126,7 +125,7 @@ class ConfirmEmailOTPView(APIView):
 
             is_valid, result = validate_otp(request.user, new_email, otp)
             if not is_valid:
-                return Response({'error': result}, status=400 if "Invalid" in result else 429)
+                return Response({'error': result}, status=429 if "Too many failed attempts" in result else 400)
 
             # OTP is valid
             request.user.email = new_email

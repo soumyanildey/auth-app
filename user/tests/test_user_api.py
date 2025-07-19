@@ -7,12 +7,15 @@ from rest_framework.test import APIClient
 from django.test import TestCase
 from django.urls import reverse
 from rest_framework import status
+from core.models import EmailOTP
 
 CREATE_USER_URL = reverse('user:create')
 JWT_TOKEN_URL = reverse('user:token')
 JWT_REFRESH_TOKEN_URL = reverse('user:token_refresh')
 LOGOUT_URL = reverse('user:logout')
 UPDATE_USER_URL = reverse("user:me")
+REQ_EMAIL_CHANGE = reverse('user:request-email-otp')
+VERIFY_EMAIL_CHANGE = reverse('user:verify-email-otp')
 
 
 def create_user(**params):

@@ -2,9 +2,6 @@ from rest_framework import serializers
 from django.utils.translation import gettext as _
 from django.contrib.auth import get_user_model
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-import logging
-
-logger = logging.getLogger(__name__)
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -46,16 +43,14 @@ class UserSerializer(serializers.ModelSerializer):
 
     def validate(self, data):
         if self.instance:
-            # Warn if tampered input tries to update password/email
+            # Check if tampered input tries to update password/email
             if 'email' in self.initial_data:
-                logger.warning(
-                    f"User {self.instance.pk} attempted to update email via profile update.")
+
                 raise serializers.ValidationError(
                     {'email': _('Email update is not allowed here.')})
 
             if 'password' in self.initial_data or 'password2' in self.initial_data:
-                logger.warning(
-                    f"User {self.instance.pk} attempted to update password via profile update.")
+
                 raise serializers.ValidationError(
                     {'password': _('Password update is not allowed here.')})
         else:
