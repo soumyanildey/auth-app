@@ -82,14 +82,16 @@ class LogoutView(APIView):
 class RequestEmailOTPView(APIView):
     '''APIView for requesting email change with OTP'''
     permission_classes = [permissions.IsAuthenticated]
+    serializer_class = EmailOTPRequestSerializer
 
     def post(self, request):
-        serializer = EmailOTPRequestSerializer(data=request.data)
+        serializer = self.serializer_class(data=request.data)
         if serializer.is_valid():
             new_email = serializer.validated_data['new_email']
 
             if new_email.lower() == request.user.email.lower():
-                return Response({'message': 'Both emails are the same'}, status=400)
+                if request.user.is_email_verified:
+                    return Response({'message': 'Email is already verified'}, status=400)
 
             # Check if email is already in use by another user
             if get_user_model().objects.filter(email=new_email).exclude(id=request.user.id).exists():
@@ -116,9 +118,10 @@ class RequestEmailOTPView(APIView):
 class ConfirmEmailOTPView(APIView):
     '''APIView for Confirmation of Email OTP'''
     permission_classes = [permissions.IsAuthenticated]
+    serializer_class = EmailOTPConfirmSerializer
 
     def post(self, request):
-        serializer = EmailOTPConfirmSerializer(data=request.data)
+        serializer = self.serializer_class(data=request.data)
         if serializer.is_valid():
             new_email = serializer.validated_data['new_email']
             otp = serializer.validated_data['otp']

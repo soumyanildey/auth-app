@@ -52,11 +52,18 @@ class EmailOTPApiTests(TestCase):
                 otp='123456'
             )
 
+            mock_send_otp.assert_called_once_with(
+                self.user,
+                payload['new_email'],
+                subject="Change Email OTP",
+                purpose="change_email"
+            )
+
         # Check response status and data
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         self.assertIn('message', res.data)
 
-        
+
         # Check that an OTP record was created
         self.assertTrue(
             EmailOTP.objects.filter(
@@ -65,15 +72,30 @@ class EmailOTPApiTests(TestCase):
             ).exists()
         )
 
-    def test_request_otp_same_email(self):
-        """Test requesting OTP with same email as current user email"""
+    def test_request_otp_same_email_and_verified(self):
+        """Test requesting OTP with same email as verified current user email"""
         payload = {'new_email': 'test@example.com'}
 
+
+        self.user.is_email_verified = True
+        self.user.save()
         res = self.client.post(REQUEST_EMAIL_OTP_URL, payload)
 
         self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn('message', res.data)
-        self.assertEqual(res.data['message'], 'Both emails are the same')
+        self.assertEqual(res.data['message'], 'Email is already verified')
+
+    def test_request_otp_same_email_and_not_verified(self):
+        """Test requesting OTP with same email as not verified current user email"""
+        payload = {'new_email': 'test@example.com'}
+
+        self.user.is_email_verified = False
+        self.user.save()
+        res = self.client.post(REQUEST_EMAIL_OTP_URL, payload)
+
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertIn('message', res.data)
+        self.assertEqual(res.data['message'], 'OTP sent to new E-Mail')
 
     def test_request_otp_email_in_use(self):
         """Test requesting OTP with email already in use by another user"""
