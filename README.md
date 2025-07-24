@@ -56,6 +56,8 @@ auth-app/
 - **API Framework**: Django REST Framework 3.16.0
 - **Authentication**: JWT (djangorestframework-simplejwt 5.5.0)
 - **Database**: PostgreSQL
+- **Caching**: Redis with django-redis
+- **Rate Limiting**: DRF throttling with Redis backend
 - **Documentation**: drf-spectacular 0.28.0
 - **Dependency Management**: Poetry
 - **Development Environment**: Docker for local PostgreSQL
@@ -86,6 +88,15 @@ Stores OTP information for email verification:
 - **Verification Data**: new_email, otp
 - **Security**: attempts (tracks failed attempts)
 - **Timestamps**: created_at (for expiration checking)
+
+### PasswordHistory Model
+
+Tracks password history for reuse prevention:
+
+- **Relationship**: ForeignKey to CustomUser
+- **Security Data**: password (hashed), changed_at
+- **Functionality**: Prevents reuse of last 10 passwords
+- **Auto-cleanup**: Maintains only 10 most recent passwords per user
 
 ## API Endpoints
 
@@ -120,6 +131,13 @@ Stores OTP information for email verification:
   - Requires: Superadmin role
   - Access: All users
 
+### Password Management
+- `POST /api/user/password_change_with_old_password` - Change password with old password verification
+  - Accepts: old_password, new_password
+  - Validation: Old password verification, password history check (prevents reuse of last 10 passwords)
+  - Security: Minimum 5 character requirement
+  - Returns: Success/error message
+
 ### Email Verification
 - `POST /api/user/request-email-otp/` - Request email change OTP
   - Accepts: new_email
@@ -131,19 +149,16 @@ Stores OTP information for email verification:
   - Validation: OTP correctness, expiration (10 minutes), max attempts (5)
   - Action: Updates user email and marks as verified
 
+
+
 ## Security Features
 
 ### JWT Configuration
 
-```python
-SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=5),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
-    'AUTH_HEADER_TYPES': ('Bearer',),
-    'BLACKLIST_AFTER_ROTATION': True,
-    'ROTATE_REFRESH_TOKENS': True,
-}
-```
+- **Access Token Lifetime**: 5 minutes (configurable)
+- **Refresh Token Lifetime**: 7 days (configurable)
+- **Token Rotation**: Enabled for enhanced security
+- **Blacklisting**: Tokens are blacklisted after rotation
 
 ### OTP Security
 
@@ -162,12 +177,31 @@ SIMPLE_JWT = {
   - CommonPasswordValidator
   - NumericPasswordValidator
 
+### Caching & Performance
+
+**Redis Configuration:**
+- Backend: django_redis.cache.RedisCache
+- Connection: Configurable Redis instance
+- Client: DefaultClient for optimal performance
+
+**API Rate Limiting:**
+- Anonymous users: 100 requests/day
+- Authenticated users: 1000 requests/day
+- Backend: Redis-based throttling
+- Classes: AnonRateThrottle, UserRateThrottle
+
+**Features:**
+- Redis-backed caching for improved performance
+- Rate limiting to prevent API abuse
+- Separate limits for anonymous (100/day) and authenticated users (1000/day)
+- Cache-based throttling with automatic cleanup
+
 ## Project Setup
 
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/your-username/auth-app.git
+git clone <your-repository-url>
 cd auth-app
 ```
 
@@ -182,9 +216,9 @@ poetry install
 Option 1: Using docker run command:
 ```bash
 docker run --name auth_pg \
-  -e POSTGRES_DB=auth_db \
-  -e POSTGRES_USER=auth_user \
-  -e POSTGRES_PASSWORD=auth_pass \
+  -e POSTGRES_DB=<your_db_name> \
+  -e POSTGRES_USER=<your_db_user> \
+  -e POSTGRES_PASSWORD=<your_secure_password> \
   -p 5432:5432 \
   -d postgres:15
 ```
@@ -195,31 +229,43 @@ cd docker/postgres
 docker-compose up -d
 ```
 
-### 4. Create `.env` File
+### 4. Install and Run Redis
+
+**Option 1: Using Docker:**
+```bash
+docker run --name auth_redis -p 6379:6379 -d redis:7-alpine
+```
+
+**Option 2: Local Installation:**
+- Windows: Download from https://redis.io/download
+- macOS: `brew install redis && brew services start redis`
+- Linux: `sudo apt-get install redis-server`
+
+### 5. Create `.env` File
 
 ```ini
 # .env
-DEBUG=True
-SECRET_KEY=your-django-secret-key
-DATABASE_URL=postgres://auth_user:auth_pass@localhost:5432/auth_db
+DEBUG=False  # Set to True only for development
+SECRET_KEY=<your-secure-secret-key>
+DATABASE_URL=postgres://<user>:<password>@<host>:<port>/<database>
 
 EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
-EMAIL_HOST=smtp.example.com
-EMAIL_PORT=587
+EMAIL_HOST=<your-smtp-host>
+EMAIL_PORT=<smtp-port>
 EMAIL_USE_TLS=True
-EMAIL_HOST_USER=your@email.com
-EMAIL_HOST_PASSWORD=email-password
-DEFAULT_FROM_EMAIL=your@email.com
+EMAIL_HOST_USER=<your-email>
+EMAIL_HOST_PASSWORD=<your-email-password>
+DEFAULT_FROM_EMAIL=<your-from-email>
 
 # For testing
-TEST_DB_NAME=test_db
-TEST_DB_USER=test_user
-TEST_DB_PASSWORD=test_pass
+TEST_DB_NAME=<test_database>
+TEST_DB_USER=<test_user>
+TEST_DB_PASSWORD=<test_password>
 TEST_DB_HOST=localhost
 TEST_DB_PORT=5432
 ```
 
-### 5. Wait for Database and Apply Migrations
+### 6. Wait for Database and Apply Migrations
 
 ```bash
 poetry shell
@@ -227,19 +273,19 @@ python manage.py wait_for_db  # Custom command to ensure database is ready
 python manage.py migrate
 ```
 
-### 6. Create Superuser (Optional)
+### 7. Create Superuser (Optional)
 
 ```bash
 python manage.py createsuperuser
 ```
 
-### 7. Run Development Server
+### 8. Run Development Server
 
 ```bash
 python manage.py runserver
 ```
 
-### 8. Access API Documentation
+### 9. Access API Documentation
 
 Once the server is running, you can access the API documentation at:
 ```
@@ -258,8 +304,11 @@ python manage.py test
 
 ### Test Coverage
 
-- **Model Tests**: Tests for CustomUser and EmailOTP models
-- **API Tests**: Tests for all API endpoints including authentication, user management, and email verification
+- **Model Tests**: Tests for CustomUser, EmailOTP, and PasswordHistory models
+- **API Tests**: Tests for all API endpoints including authentication, user management, email verification, and password change
+- **Security Tests**: Password reuse prevention, history tracking, and validation tests
+- **Edge Case Tests**: Special characters, unicode, long passwords, and HTTP method restrictions
+- **Throttling Tests**: Rate limiting for anonymous and authenticated users
 - **Utility Tests**: Tests for OTP generation, validation, and email sending
 
 ## Current Development Status
@@ -273,8 +322,30 @@ The project is in active development with the following components completed:
 - ✅ Email OTP verification system with security features
 - ✅ User profile management API
 - ✅ Token refresh and blacklisting
+- ✅ Password change with old password verification
+- ✅ Password history tracking and reuse prevention
+- ✅ Redis caching for improved performance
+- ✅ API rate limiting and throttling
 - ✅ API documentation with Swagger
-- ✅ Comprehensive test suite
+- ✅ Comprehensive test suite with edge cases
+
+### Security Enhancements Implemented
+- ✅ Password reuse prevention (last 10 passwords)
+- ✅ Automatic password history management
+- ✅ Secure password validation and hashing
+- ✅ Rate limiting for OTP requests
+- ✅ API throttling (100/day anonymous, 1000/day authenticated)
+- ✅ Redis-backed caching and rate limiting
+- ✅ Token blacklisting and rotation
+
+### Test Coverage
+- ✅ Authentication flow tests
+- ✅ User management tests
+- ✅ Email verification tests
+- ✅ Password change comprehensive test suite
+- ✅ Edge case and validation tests
+- ✅ Security feature tests
+- ✅ Throttling and rate limiting tests
 
 ## Next Steps
 

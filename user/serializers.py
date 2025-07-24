@@ -99,3 +99,8 @@ class EmailOTPRequestSerializer(serializers.Serializer):
 class EmailOTPConfirmSerializer(serializers.Serializer):
     new_email = serializers.EmailField()
     otp = serializers.CharField(max_length=6)
+
+
+class PasswordChangeWithOldPasswordSerializer(serializers.Serializer):
+    old_password = serializers.CharField(write_only=True,min_length=5)
+    new_password = serializers.CharField(write_only=True,min_length=5)

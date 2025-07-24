@@ -12,6 +12,10 @@ urlpatterns = [
     path('logout/',views.LogoutView.as_view(),name='logout'),
     path('request-email-otp/', views.RequestEmailOTPView.as_view(), name='request-email-otp'),
     path('verify-email-otp/', views.ConfirmEmailOTPView.as_view(), name='verify-email-otp'),
+    path('public_test-throttle',views.PublicThrottleTest.as_view(),name='public_throttle_test'),
+    path('private_test-throttle', views.PrivateThrottleTest.as_view(), name='private_throttle_test'),
+    path('password_change_with_old_password',views.PasswordChangeWithOldPasswordView.as_view(),name="passchange"),
+    
 
 
 ]

@@ -2,8 +2,10 @@ from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.utils import timezone
 from datetime import timedelta
-import uuid,datetime
+import uuid
+import datetime
 from Authentication_App.settings import AUTH_USER_MODEL
+
 
 class CustomUserManager(BaseUserManager):
     '''User Model Manager'''
@@ -27,11 +29,24 @@ class CustomUserManager(BaseUserManager):
         return self.get(email=email)
 
 
+def save_password_to_history(user):
+    if not user.pk:
+        return
+
+    PasswordHistory.objects.create(user=user, password=user.password)
+
+    old_passwords = PasswordHistory.objects.filter(
+        user=user).order_by('-changed_at')
+    if old_passwords.count() > 10:
+        old_passwords[10:].delete()
+
+
 class CustomUser(AbstractBaseUser, PermissionsMixin):
     '''User Model'''
 
     email = models.EmailField(unique=True)
-    username = models.CharField(max_length=150, unique=True, blank=True, null=True)
+    username = models.CharField(
+        max_length=150, unique=True, blank=True, null=True)
     fname = models.CharField(max_length=150)
     lname = models.CharField(max_length=150)
     phone = models.CharField(max_length=20)
@@ -77,14 +92,12 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(null=True, blank=True)
 
-
     role = models.CharField(max_length=30, choices=[
-    ("superadmin", "Super Admin"),
-    ("admin", "Admin"),
-    ("moderator", "Moderator"),
-    ("user", "User"),
+        ("superadmin", "Super Admin"),
+        ("admin", "Admin"),
+        ("moderator", "Moderator"),
+        ("user", "User"),
     ], default="user")
-
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = ['fname', 'lname', 'phone']
@@ -98,6 +111,19 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     def get_full_name(self):
         return self.fname + " " + self.lname
 
+    def save(self, *args, **kwargs):
+        is_new = self.pk is None
+        old_password = None
+
+        if not is_new:
+            old_user = CustomUser.objects.get(pk=self.pk)
+            old_password = old_user.password
+
+        super().save(*args, **kwargs)
+
+        if is_new or (old_password and old_password != self.password):
+            save_password_to_history(self)
+
 
 class EmailOTP(models.Model):
     '''Model for Email OTP Verification'''
@@ -107,9 +133,21 @@ class EmailOTP(models.Model):
     attempts = models.IntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
 
-
     def is_otp_expired(self):
         return timezone.now() > self.created_at + datetime.timedelta(minutes=10)
 
     class Meta:
         ordering = ['-created_at']
+
+
+class PasswordHistory(models.Model):
+    '''Model for password history tracking'''
+    user = models.ForeignKey(AUTH_USER_MODEL, on_delete=models.CASCADE)
+    password = models.CharField(max_length=255)
+    changed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-changed_at']
+
+    def __str__(self):
+        return f"Password Changed for {self.user} at {self.changed_at}"

@@ -2,6 +2,7 @@ from rest_framework import generics, permissions, status
 from .serializers import (
     UserSerializer, CustomTokenObtainPairSerializer, LogoutSerializer,
     EmailOTPConfirmSerializer, EmailOTPRequestSerializer,
+    PasswordChangeWithOldPasswordSerializer
 )
 from rest_framework.settings import api_settings
 from . import permissions as custom_permissions
@@ -10,7 +11,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from core.models import EmailOTP
+from core.models import EmailOTP, PasswordHistory
 from django.core.mail import send_mail
 from django.conf import settings
 from django.utils import timezone
@@ -18,6 +19,17 @@ import datetime
 from django.db import transaction
 import secrets
 from .utils import generate_and_send_otp, validate_otp
+from django.contrib.auth.hashers import check_password
+
+
+def check_password_reuse(user, raw_password):
+    '''Check for last 10 passwords if reused'''
+    old_passwords = PasswordHistory.objects.filter(
+        user=user).order_by('-changed_at')[:10]
+    for old in old_passwords:
+        if check_password(raw_password, old.password):
+            return True
+    return False
 
 
 class CreateUserView(generics.CreateAPIView):
@@ -139,3 +151,42 @@ class ConfirmEmailOTPView(APIView):
             return Response({'success': 'Email verified and updated'}, status=200)
 
         return Response({'error': 'Invalid Request'}, status=400)
+
+
+class PasswordChangeWithOldPasswordView(APIView):
+    '''View for password change with old password'''
+    serializer_class = PasswordChangeWithOldPasswordSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        serializer = self.serializer_class(data=request.data)
+        if serializer.is_valid():
+            old_pass = serializer.validated_data['old_password']
+            new_pass = serializer.validated_data['new_password']
+
+            try:
+                if not request.user.check_password(old_pass):
+                    return Response({'error': 'Incorrect Password.'}, status=400)
+                if check_password_reuse(request.user, new_pass):
+                    return Response({'error': 'Please use password other than recent ones'}, status=400)
+                request.user.set_password(new_pass)
+                request.user.save()
+                return Response({'success': 'Successfully Password Changed.'}, status=200)
+
+            except Exception:
+                return Response({'error': 'Something Went Wrong. Please try again later.'}, status=400)
+
+        return Response({'error': 'Invalid Request'}, status=400)
+
+
+class PublicThrottleTest(APIView):
+
+    def get(self,request):
+        return Response({'Success':f'Success for {request.user}'},status=200)
+
+
+class PrivateThrottleTest(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self,request):
+        return Response({'Success':f'Success for {request.user}'},status=200)

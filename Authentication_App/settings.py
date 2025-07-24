@@ -52,8 +52,6 @@ INSTALLED_APPS = [
 ]
 
 
-
-
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -83,14 +81,35 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'Authentication_App.wsgi.application'
 
+
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": "redis://127.0.0.1:6379/1",  # Use DB 1 of Redis
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+        }
+    }
+}
+
+
+
+
 REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
-    )
+    ),
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle'
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '100/day',
+        'user': '1000/day'
+    },
+    "DEFAULT_CACHE_BACKEND": "default",
 }
-
-
 
 
 SIMPLE_JWT = {
@@ -122,7 +141,6 @@ if 'test' in sys.argv or 'pytest' in sys.modules:
         'HOST': config('TEST_DB_HOST'),
         'PORT': config('TEST_DB_PORT'),
     }
-
 
 
 # Password validation
@@ -175,3 +193,8 @@ EMAIL_HOST_USER = config('EMAIL_HOST_USER')
 EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD')
 EMAIL_USE_TLS = config('EMAIL_USE_TLS', cast=bool)
 DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL')
+
+
+if 'test' in sys.argv:
+    CACHES['default']['LOCATION'] = 'redis://127.0.0.1:6379/5'
+    REST_FRAMEWORK['DEFAULT_CACHE_BACKEND'] = 'default'  #

@@ -82,3 +82,24 @@ class ModelTests(TestCase):
 
         self.assertIsNotNone(res.created_at)
         self.assertTrue(timezone.is_aware(res.created_at))
+
+
+    def test_password_history(self):
+        '''Check logging of Password History'''
+        email = 'test@example.com'
+        password = 'testpass123'
+
+        user = get_user_model().objects.create_user(
+            email=email,
+            password=password,
+            fname='Test',
+            lname='User',
+            phone='1234567890'
+        )
+
+        res = models.PasswordHistory.objects.filter(user=user).first()
+
+        self.assertEqual(res.user, user)
+        self.assertTrue(user.check_password(password))
+        self.assertIsNotNone(res.changed_at)
+        self.assertTrue(timezone.is_aware(res.changed_at))
