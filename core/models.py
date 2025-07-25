@@ -81,6 +81,7 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     last_login_location = models.CharField(max_length=255, blank=True)
     failed_login_attempts = models.IntegerField(default=0)
     last_failed_login = models.DateTimeField(null=True, blank=True)
+    totp_secret = models.CharField(max_length=32,blank=True,null=True)
 
     # Preferences
     language = models.CharField(max_length=20, default="en")

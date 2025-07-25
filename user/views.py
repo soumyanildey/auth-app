@@ -2,7 +2,8 @@ from rest_framework import generics, permissions, status
 from .serializers import (
     UserSerializer, CustomTokenObtainPairSerializer, LogoutSerializer,
     EmailOTPConfirmSerializer, EmailOTPRequestSerializer,
-    PasswordChangeWithOldPasswordSerializer
+    PasswordChangeWithOldPasswordSerializer, Verify2FASerializer,
+    Login2FASerializer
 )
 from rest_framework.settings import api_settings
 from . import permissions as custom_permissions
@@ -20,6 +21,18 @@ from django.db import transaction
 import secrets
 from .utils import generate_and_send_otp, validate_otp
 from django.contrib.auth.hashers import check_password
+import base64
+import io
+import pyotp
+import qrcode
+
+
+def check_account_lockout(user):
+    if not user.is_active:
+        return Response({'error':'Wrong username or password.'},status=status.HTTP_400_BAD_REQUEST)
+    if user.is_blocked:
+        return Response({'error':'Account blocked due to too many failed login attempts. Please contact support.'},status=status.HTTP_423_LOCKED)
+    return None
 
 
 def check_password_reuse(user, raw_password):
@@ -73,6 +86,19 @@ class SuperAdminUserView(generics.RetrieveUpdateDestroyAPIView):
 class CustomTokenObtainPairView(TokenObtainPairView):
     '''Custom token view'''
     serializer_class = CustomTokenObtainPairSerializer
+
+    def post(self,request,*args,**kwargs):
+        email = request.data.get('email')
+        if email:
+            try:
+                user = get_user_model().objects.get(email=email)
+                lockout_response = check_account_lockout(user)
+                if lockout_response:
+                    return lockout_response
+            except get_user_model().DoesNotExist:
+                pass
+        return super().post(request,*args,**kwargs)
+
 
 
 class LogoutView(APIView):
@@ -181,12 +207,136 @@ class PasswordChangeWithOldPasswordView(APIView):
 
 class PublicThrottleTest(APIView):
 
-    def get(self,request):
-        return Response({'Success':f'Success for {request.user}'},status=200)
+    def get(self, request):
+        return Response({'Success': f'Success for {request.user}'}, status=200)
 
 
 class PrivateThrottleTest(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
-    def get(self,request):
-        return Response({'Success':f'Success for {request.user}'},status=200)
+    def get(self, request):
+        return Response({'Success': f'Success for {request.user}'}, status=200)
+
+
+class Enable2FAA(APIView):
+    '''API for Enabling 2FA Auth'''
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        user = request.user
+
+        if user.is_2fa_enabled:
+            return Response({'error': '2FA already Enabled'}, status=400)
+
+        try:
+            secret = pyotp.random_base32()
+
+            user.totp_secret = secret
+            user.is_2fa_enabled = True
+            user.save()
+
+            totp_uri = pyotp.TOTP(secret).provisioning_uri(
+                name=user.email,
+                issuer_name="<Your Organization>"
+            )
+
+            qr = qrcode.make(totp_uri)
+            buffer = io.BytesIO()
+            qr.save(buffer, format='PNG')
+            img_str = base64.b64encode(buffer.getvalue()).decode()
+
+            return Response({'qr_code': f'data:image/png;base64,{img_str}',
+                            'message': 'Scan this QR code with Google Authenticator'}, status=200)
+
+        except Exception:
+            return Response({'error': 'Failed to enable 2FA'}, status=500)
+
+
+class Verify2FA(APIView):
+    '''View to confirm 2FA Auth'''
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = Verify2FASerializer
+
+    def post(self, request):
+        serializer = self.serializer_class(data=request.data)
+        user = request.user
+
+        if not user.is_2fa_enabled or not user.totp_secret:
+            return Response({'error': '2FA not Enabled.'}, status=400)
+
+        if serializer.is_valid():
+            otp = serializer.validated_data['otp']
+
+            try:
+                totp = pyotp.TOTP(user.totp_secret)
+                if totp.verify(otp, valid_window=1):
+                    return Response({"success": "2FA verified successfully."}, status=status.HTTP_200_OK)
+                else:
+                    return Response({"error": "Invalid or expired OTP."}, status=status.HTTP_400_BAD_REQUEST)
+
+            except Exception:
+                return Response({"error": "Invalid or expired OTP."}, status=status.HTTP_400_BAD_REQUEST)
+
+        else:
+            return Response({'error': 'Invalid Credentials'}, status=400)
+
+
+class Login2FA(APIView):
+    '''Complete login after 2FA verification'''
+    serializer_class = Login2FASerializer
+
+    def post(self, request):
+        serializer = self.serializer_class(data=request.data)
+
+        if serializer.is_valid():
+            user_id = serializer.validated_data['user_id']
+            otp = serializer.validated_data['otp']
+
+            try:
+                user = get_user_model().objects.get(id=user_id)
+
+                if not user.is_2fa_enabled or not user.totp_secret:
+                    return Response({'error': '2FA not enabled'}, status=400)
+
+                totp = pyotp.TOTP(user.totp_secret)
+                if totp.verify(otp, valid_window=1):
+                    # Generate JWT tokens
+                    refresh = RefreshToken.for_user(user)
+                    return Response({
+                        'refresh': str(refresh),
+                        'access': str(refresh.access_token),
+                    }, status=200)
+                else:
+                    return Response({'error': 'Invalid or expired OTP'}, status=400)
+
+            except get_user_model().DoesNotExist:
+                return Response({'error': 'Invalid user'}, status=400)
+            except Exception:
+                return Response({'error': 'Invalid or expired OTP'}, status=400)
+
+        return Response({'error': 'Invalid credentials'}, status=400)
+
+
+class UnblockUserView(APIView):
+    '''Admin/Superadmin View for unblocking user'''
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def check_permissions(self, request):
+        super().check_permissions(request)
+        if not (request.user.role == 'admin' or request.user.role == 'superadmin'):
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied('Admin or SuperAdmin role required')
+
+    def post(self,request):
+        email = request.data.get('email')
+        if not email:
+            return Response({'error':'Email Required'},status=400)
+
+        try:
+            user = get_user_model().objects.get(email=email)
+            user.failed_login_attempts = 0
+            user.is_blocked = False
+            user.save()
+            return Response({'success':'Account unblocked successfully'},status=200)
+        except get_user_model().DoesNotExist:
+            return Response({'error':'User not found'},status=404)

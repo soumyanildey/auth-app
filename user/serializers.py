@@ -2,7 +2,7 @@ from rest_framework import serializers
 from django.utils.translation import gettext as _
 from django.contrib.auth import get_user_model
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-
+from django.utils import timezone
 
 class UserSerializer(serializers.ModelSerializer):
     '''User API Serializers'''
@@ -84,8 +84,37 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     username_field = get_user_model().USERNAME_FIELD
 
     def validate(self, attrs):
-        data = super().validate(attrs)
-        return data
+        try:
+            # First validate credentials
+            data = super().validate(attrs)
+            if self.user.failed_login_attempts > 0:
+                self.user.failed_login_attempts = 0
+                self.user.save()
+
+            # Check if user has 2FA enabled
+            if self.user.is_2fa_enabled:
+                # Don't return tokens yet, require 2FA verification
+                return {
+                    'requires_2fa': True,
+                    'message': '2FA verification required',
+                    'user_id': self.user.id
+                }
+
+            return data
+        except Exception:
+            email = attrs.get('email')
+            if email:
+                try:
+                    user = get_user_model().objects.get(email=email)
+                    user.failed_login_attempts += 1
+                    user.last_failed_login = timezone.now()
+                    if user.failed_login_attempts >= 5:
+                        user.is_blocked = True
+                    user.save()
+                except get_user_model().DoesNotExist:
+                    pass
+            raise
+
 
 
 class LogoutSerializer(serializers.Serializer):
@@ -104,3 +133,12 @@ class EmailOTPConfirmSerializer(serializers.Serializer):
 class PasswordChangeWithOldPasswordSerializer(serializers.Serializer):
     old_password = serializers.CharField(write_only=True,min_length=5)
     new_password = serializers.CharField(write_only=True,min_length=5)
+
+
+class Verify2FASerializer(serializers.Serializer):
+    otp = serializers.CharField(required=True,min_length=6,max_length=6)
+
+
+class Login2FASerializer(serializers.Serializer):
+    user_id = serializers.IntegerField()
+    otp = serializers.CharField(required=True,min_length=6,max_length=6)
