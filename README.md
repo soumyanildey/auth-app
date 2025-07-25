@@ -240,7 +240,7 @@ changed_at (timestamp)
 
 ### **1. Clone & Install**
 ```bash
-git clone <your-repository-url>
+git clone <repository-url>
 cd auth-app
 poetry install
 ```
@@ -249,9 +249,9 @@ poetry install
 ```bash
 # PostgreSQL (Docker)
 docker run --name auth_pg \
-  -e POSTGRES_DB=auth_db \
-  -e POSTGRES_USER=auth_user \
-  -e POSTGRES_PASSWORD=secure_password \
+  -e POSTGRES_DB=<database_name> \
+  -e POSTGRES_USER=<database_user> \
+  -e POSTGRES_PASSWORD=<database_password> \
   -p 5432:5432 -d postgres:15
 
 # Redis (Docker)
@@ -262,17 +262,17 @@ docker run --name auth_redis -p 6379:6379 -d redis:7-alpine
 ```ini
 # .env (Production-Ready Settings)
 DEBUG=False
-SECRET_KEY=your-ultra-secure-secret-key-here
-DATABASE_URL=postgres://auth_user:secure_password@localhost:5432/auth_db
+SECRET_KEY=<your-secret-key>
+DATABASE_URL=postgres://<user>:<password>@localhost:5432/<database>
 
 # Email Configuration (Required for OTP)
 EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
-EMAIL_HOST=smtp.gmail.com
+EMAIL_HOST=<smtp-host>
 EMAIL_PORT=587
 EMAIL_USE_TLS=True
-EMAIL_HOST_USER=your-email@gmail.com
-EMAIL_HOST_PASSWORD=your-app-password
-DEFAULT_FROM_EMAIL=your-email@gmail.com
+EMAIL_HOST_USER=<email>
+EMAIL_HOST_PASSWORD=<app-password>
+DEFAULT_FROM_EMAIL=<email>
 ```
 
 ### **4. Database Setup**
