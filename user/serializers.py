@@ -10,8 +10,18 @@ class UserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = get_user_model()
-        fields = ['email', 'password', 'password2', 'fname', 'lname', 'phone']
-        extra_kwargs = {'password': {'write_only': True, 'min_length': 5}}
+        fields = [
+            'email', 'password', 'password2', 'fname', 'lname', 'phone',
+            'dob', 'gender', 'bio', 'profile_pic', 'address', 'city', 'state', 'country', 'postal_code',
+            'language', 'timezone', 'prefers_dark_mode', 'role', 'is_2fa_enabled',
+            'is_email_verified', 'is_phone_verified', 'created_at', 'updated_at'
+        ]
+        extra_kwargs = {
+            'password': {'write_only': True, 'min_length': 5},
+            'created_at': {'read_only': True},
+            'updated_at': {'read_only': True},
+            'role': {'read_only': True}
+        }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -27,14 +37,20 @@ class UserSerializer(serializers.ModelSerializer):
         return value
 
     def validate_phone(self, value):
-
-        if value.isdigit() == False:
+        if not value:  # Allow empty phone
+            return value
+            
+        if not value.isdigit():
             raise serializers.ValidationError(
                 _('Phone number must be digits only!'))
 
         if len(value) < 7 or len(value) > 15:
             raise serializers.ValidationError(_('Invalid phone number!'))
 
+        # Check for duplicates only if phone is being changed
+        if self.instance and self.instance.phone == value:
+            return value
+            
         if get_user_model().objects.filter(phone=value).exists():
             raise serializers.ValidationError(
                 _('This phone number is already registered.'))
@@ -136,9 +152,43 @@ class PasswordChangeWithOldPasswordSerializer(serializers.Serializer):
 
 
 class Verify2FASerializer(serializers.Serializer):
-    otp = serializers.CharField(required=True,min_length=6,max_length=6)
+    otp = serializers.CharField(required=True)
+    
+    def validate_otp(self, value):
+        # Remove any whitespace
+        value = value.strip()
+        
+        # Check if it's numeric
+        if not value.isdigit():
+            raise serializers.ValidationError('OTP must contain only digits')
+        
+        # Pad with leading zeros if needed (TOTP codes are 6 digits)
+        value = value.zfill(6)
+        
+        # Check length after padding
+        if len(value) != 6:
+            raise serializers.ValidationError('OTP must be 6 digits')
+            
+        return value
 
 
 class Login2FASerializer(serializers.Serializer):
     user_id = serializers.IntegerField()
-    otp = serializers.CharField(required=True,min_length=6,max_length=6)
+    otp = serializers.CharField(required=True)
+    
+    def validate_otp(self, value):
+        # Remove any whitespace
+        value = value.strip()
+        
+        # Check if it's numeric
+        if not value.isdigit():
+            raise serializers.ValidationError('OTP must contain only digits')
+        
+        # Pad with leading zeros if needed (TOTP codes are 6 digits)
+        value = value.zfill(6)
+        
+        # Check length after padding
+        if len(value) != 6:
+            raise serializers.ValidationError('OTP must be 6 digits')
+            
+        return value

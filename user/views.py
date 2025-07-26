@@ -231,8 +231,8 @@ class Enable2FAA(APIView):
         try:
             secret = pyotp.random_base32()
 
+            # Only save secret, don't enable 2FA yet
             user.totp_secret = secret
-            user.is_2fa_enabled = True
             user.save()
 
             totp_uri = pyotp.TOTP(secret).provisioning_uri(
@@ -245,7 +245,7 @@ class Enable2FAA(APIView):
             qr.save(buffer, format='PNG')
             img_str = base64.b64encode(buffer.getvalue()).decode()
 
-            return Response({'qr_code': f'data:image/png;base64,{img_str}',
+            return Response({'qr_code': img_str,
                             'message': 'Scan this QR code with Google Authenticator'}, status=200)
 
         except Exception:
@@ -261,8 +261,8 @@ class Verify2FA(APIView):
         serializer = self.serializer_class(data=request.data)
         user = request.user
 
-        if not user.is_2fa_enabled or not user.totp_secret:
-            return Response({'error': '2FA not Enabled.'}, status=400)
+        if not user.totp_secret:
+            return Response({'error': '2FA setup not initiated.'}, status=400)
 
         if serializer.is_valid():
             otp = serializer.validated_data['otp']
@@ -270,7 +270,10 @@ class Verify2FA(APIView):
             try:
                 totp = pyotp.TOTP(user.totp_secret)
                 if totp.verify(otp, valid_window=1):
-                    return Response({"success": "2FA verified successfully."}, status=status.HTTP_200_OK)
+                    # Enable 2FA only after successful verification
+                    user.is_2fa_enabled = True
+                    user.save()
+                    return Response({"success": "2FA enabled successfully."}, status=status.HTTP_200_OK)
                 else:
                     return Response({"error": "Invalid or expired OTP."}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -278,7 +281,7 @@ class Verify2FA(APIView):
                 return Response({"error": "Invalid or expired OTP."}, status=status.HTTP_400_BAD_REQUEST)
 
         else:
-            return Response({'error': 'Invalid Credentials'}, status=400)
+            return Response(serializer.errors, status=400)
 
 
 class Login2FA(APIView):
@@ -315,6 +318,22 @@ class Login2FA(APIView):
                 return Response({'error': 'Invalid or expired OTP'}, status=400)
 
         return Response({'error': 'Invalid credentials'}, status=400)
+
+
+class Cancel2FASetupView(APIView):
+    '''Cancel incomplete 2FA setup'''
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        user = request.user
+        
+        # Only clear if 2FA is not fully enabled
+        if not user.is_2fa_enabled and user.totp_secret:
+            user.totp_secret = None
+            user.save()
+            return Response({'success': '2FA setup cancelled'}, status=200)
+        
+        return Response({'message': 'No incomplete 2FA setup found'}, status=200)
 
 
 class UnblockUserView(APIView):

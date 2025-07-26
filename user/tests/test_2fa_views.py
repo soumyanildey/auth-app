@@ -41,7 +41,7 @@ class Enable2FAViewTestCase(TestCase):
         self.assertIn('qr_code', response.data)
         self.assertIn('message', response.data)
         self.user.refresh_from_db()
-        self.assertTrue(self.user.is_2fa_enabled)
+        self.assertFalse(self.user.is_2fa_enabled)  # Not enabled until verified
         self.assertEqual(self.user.totp_secret, 'TESTSECRET123456')
 
     def test_enable_2fa_already_enabled(self):
@@ -103,7 +103,7 @@ class Verify2FAViewTestCase(TestCase):
             lname='User',
             phone='1234567890'
         )
-        self.user.is_2fa_enabled = True
+        # For most tests, we need a secret but 2FA not yet enabled (setup in progress)
         self.user.totp_secret = 'TESTSECRET123456'
         self.user.save()
         self.url = reverse('user:verify_2fa')
@@ -124,7 +124,10 @@ class Verify2FAViewTestCase(TestCase):
         response = self.client.post(self.url, {'otp': '123456'})
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data['success'], '2FA verified successfully.')
+        self.assertEqual(response.data['success'], '2FA enabled successfully.')
+        # Verify 2FA is now enabled
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.is_2fa_enabled)
 
     @patch('user.views.pyotp.TOTP')
     def test_verify_2fa_invalid_otp(self, mock_totp):
@@ -144,12 +147,13 @@ class Verify2FAViewTestCase(TestCase):
         """Test 2FA verification when 2FA is not enabled"""
         self.authenticate_user()
         self.user.is_2fa_enabled = False
+        self.user.totp_secret = None
         self.user.save()
 
         response = self.client.post(self.url, {'otp': '123456'})
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data['error'], '2FA not Enabled.')
+        self.assertEqual(response.data['error'], '2FA setup not initiated.')
 
     def test_verify_2fa_no_secret(self):
         """Test 2FA verification when no TOTP secret exists"""
@@ -160,7 +164,7 @@ class Verify2FAViewTestCase(TestCase):
         response = self.client.post(self.url, {'otp': '123456'})
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data['error'], '2FA not Enabled.')
+        self.assertEqual(response.data['error'], '2FA setup not initiated.')
 
     def test_verify_2fa_unauthenticated(self):
         """Test 2FA verification without authentication"""
@@ -309,7 +313,7 @@ class TwoFAIntegrationTestCase(TestCase):
         """Test complete 2FA enablement and verification flow"""
         self.authenticate_user()
 
-        # Step 1: Enable 2FA
+        # Step 1: Enable 2FA (generates QR, saves secret, but doesn't enable yet)
         with patch('qrcode.make') as mock_qr, patch('pyotp.random_base32') as mock_secret:
             mock_secret.return_value = 'TESTSECRET123456'
             mock_qr_instance = MagicMock()
@@ -319,9 +323,10 @@ class TwoFAIntegrationTestCase(TestCase):
 
             self.assertEqual(enable_response.status_code, status.HTTP_200_OK)
             self.user.refresh_from_db()
-            self.assertTrue(self.user.is_2fa_enabled)
+            self.assertFalse(self.user.is_2fa_enabled)  # Not enabled until verified
+            self.assertEqual(self.user.totp_secret, 'TESTSECRET123456')
 
-        # Step 2: Verify 2FA
+        # Step 2: Verify 2FA (this actually enables 2FA)
         with patch('pyotp.TOTP') as mock_totp:
             mock_totp_instance = MagicMock()
             mock_totp.return_value = mock_totp_instance
@@ -330,6 +335,8 @@ class TwoFAIntegrationTestCase(TestCase):
             verify_response = self.client.post(self.verify_url, {'otp': '123456'})
 
             self.assertEqual(verify_response.status_code, status.HTTP_200_OK)
+            self.user.refresh_from_db()
+            self.assertTrue(self.user.is_2fa_enabled)  # Now it's enabled
 
     def test_multiple_users_2fa_isolation(self):
         """Test that 2FA settings are isolated between users"""
@@ -344,6 +351,12 @@ class TwoFAIntegrationTestCase(TestCase):
         self.authenticate_user()
         with patch('qrcode.make'), patch('pyotp.random_base32', return_value='SECRET1'):
             self.client.post(self.enable_url)
+        # Complete 2FA setup
+        with patch('pyotp.TOTP') as mock_totp:
+            mock_totp_instance = MagicMock()
+            mock_totp.return_value = mock_totp_instance
+            mock_totp_instance.verify.return_value = True
+            self.client.post(self.verify_url, {'otp': '123456'})
 
         # Switch to second user
         refresh2 = RefreshToken.for_user(user2)
@@ -352,7 +365,7 @@ class TwoFAIntegrationTestCase(TestCase):
         # Second user should not have 2FA enabled
         response = self.client.post(self.verify_url, {'otp': '123456'})
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data['error'], '2FA not Enabled.')
+        self.assertEqual(response.data['error'], '2FA setup not initiated.')
 
     def test_2fa_state_persistence(self):
         """Test that 2FA state persists across sessions"""
@@ -361,6 +374,12 @@ class TwoFAIntegrationTestCase(TestCase):
         # Enable 2FA
         with patch('qrcode.make'), patch('pyotp.random_base32', return_value='PERSISTENT'):
             self.client.post(self.enable_url)
+        # Complete 2FA setup
+        with patch('pyotp.TOTP') as mock_totp:
+            mock_totp_instance = MagicMock()
+            mock_totp.return_value = mock_totp_instance
+            mock_totp_instance.verify.return_value = True
+            self.client.post(self.verify_url, {'otp': '123456'})
 
         # Create new session
         new_client = APIClient()
