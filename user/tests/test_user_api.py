@@ -8,6 +8,7 @@ from django.test import TestCase
 from django.urls import reverse
 from rest_framework import status
 from core.models import EmailOTP
+from unittest.mock import patch, MagicMock
 
 CREATE_USER_URL = reverse('user:create')
 JWT_TOKEN_URL = reverse('user:token')
@@ -181,6 +182,8 @@ class PublicUserAPITest(TestCase):
         self.assertIn("refresh", res.data)
         self.assertIn('access', res.data)
 
+
+
     def test_unauthorized_entry(self):
         '''Test for unauthorized entry'''
 
@@ -225,6 +228,46 @@ class PublicUserAPITest(TestCase):
         self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
         self.assertNotIn('access', res.data)
         self.assertNotIn('refresh', res.data)
+
+    def test_unified_login_with_2fa(self):
+        '''Test unified login with 2FA enabled user'''
+        user_details = {
+            'email': 'test2fa@example.com',
+            'fname': 'Test',
+            'lname': '2FA',
+            'phone': '1234567891',
+            'password': 'testpass123',
+            'is_2fa_enabled': True,
+            'totp_secret': 'TESTSECRET123456'
+        }
+        
+        create_user(**user_details)
+        
+        # Test login without OTP requires 2FA
+        payload = {
+            'email': 'test2fa@example.com',
+            'password': 'testpass123'
+        }
+        response = self.client.post(JWT_TOKEN_URL, payload, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data.get('requires_2fa', False))
+        self.assertNotIn('access', response.data)
+        
+        # Test unified login with OTP
+        with patch('pyotp.TOTP') as mock_totp:
+            mock_totp_instance = MagicMock()
+            mock_totp.return_value = mock_totp_instance
+            mock_totp_instance.verify.return_value = True
+            
+            payload_with_otp = {
+                'email': 'test2fa@example.com',
+                'password': 'testpass123',
+                'otp': '123456'
+            }
+            response = self.client.post(JWT_TOKEN_URL, payload_with_otp, format='json')
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+            self.assertIn('access', response.data)
+            self.assertIn('refresh', response.data)
 
 
 class PrivateTestCase(TestCase):

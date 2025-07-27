@@ -127,16 +127,21 @@ class SecurityTestCase(TestCase):
             self.assertEqual(response.status_code, status.HTTP_200_OK)
             self.assertIn('qr_code', response.data)
 
-        # Test login requires 2FA
+        # Enable 2FA for the user first
+        self.user.is_2fa_enabled = True
+        self.user.totp_secret = 'TESTSECRET123456'
+        self.user.save()
+        
+        # Test login without OTP requires 2FA
         self.client.credentials()
         response = self.client.post(self.login_url, {
             'email': 'test@example.com',
             'password': 'testpass123'
         })
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertTrue(response.data['requires_2fa'])
+        self.assertTrue(response.data.get('requires_2fa', False))
 
-        # Test 2FA verification
+        # Test 2FA verification for setup
         verify_2fa_url = reverse('user:verify_2fa')
         self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {refresh.access_token}')
         
@@ -148,8 +153,7 @@ class SecurityTestCase(TestCase):
             response = self.client.post(verify_2fa_url, {'otp': '123456'})
             self.assertEqual(response.status_code, status.HTTP_200_OK)
 
-        # Test 2FA login completion
-        login_2fa_url = reverse('user:login_2fa')
+        # Test unified 2FA login
         self.client.credentials()
         
         with patch('pyotp.TOTP') as mock_totp:
@@ -157,8 +161,9 @@ class SecurityTestCase(TestCase):
             mock_totp.return_value = mock_totp_instance
             mock_totp_instance.verify.return_value = True
             
-            response = self.client.post(login_2fa_url, {
-                'user_id': self.user.id,
+            response = self.client.post(self.login_url, {
+                'email': 'test@example.com',
+                'password': 'testpass123',
                 'otp': '123456'
             })
             self.assertEqual(response.status_code, status.HTTP_200_OK)

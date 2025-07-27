@@ -128,10 +128,17 @@ SIMPLE_JWT = {
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
 DATABASES = {
-    'default': dj_database_url.parse(
-        config('DATABASE_URL'),
-        ssl_require=True   # needed for most hosted DBs
-    ),
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': config('DEV_DB_NAME'),
+        'USER': config('DEV_DB_USER'),
+        'PASSWORD': config('DEV_DB_PASSWORD'),
+        'HOST': config('DEV_DB_HOST'),
+        'PORT': config('DEV_DB_PORT'),
+        'OPTIONS': {
+            'sslmode': 'disable',
+        },
+    },
 }
 
 
@@ -143,6 +150,9 @@ if 'test' in sys.argv or 'pytest' in sys.modules:
         'PASSWORD': config('TEST_DB_PASSWORD'),
         'HOST': config('TEST_DB_HOST'),
         'PORT': config('TEST_DB_PORT'),
+        'OPTIONS': {
+            'sslmode': 'disable',
+        },
     }
 
 
@@ -181,6 +191,11 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+# Media files (uploads)
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
@@ -219,6 +234,10 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:5500",
 ]
 CORS_ALLOW_CREDENTIALS = True
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:5500",
+    "http://127.0.0.1:5500",
+]
 CORS_ALLOW_ALL_ORIGINS = DEBUG  # Allow all origins in debug mode
 CORS_ALLOWED_HEADERS = [
     'accept',

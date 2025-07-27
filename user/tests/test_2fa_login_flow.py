@@ -35,8 +35,8 @@ class CustomTokenObtainPairSerializerTestCase(TestCase):
         self.assertIn('refresh', response.data)
         self.assertNotIn('requires_2fa', response.data)
 
-    def test_login_with_2fa_enabled(self):
-        """Test login for user with 2FA enabled"""
+    def test_login_with_2fa_enabled_no_otp(self):
+        """Test login for user with 2FA enabled without OTP"""
         self.user.is_2fa_enabled = True
         self.user.totp_secret = 'TESTSECRET123456'
         self.user.save()
@@ -48,10 +48,49 @@ class CustomTokenObtainPairSerializerTestCase(TestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data['requires_2fa'])
-        self.assertEqual(response.data['user_id'], self.user.id)
         self.assertEqual(response.data['message'], '2FA verification required')
         self.assertNotIn('access', response.data)
         self.assertNotIn('refresh', response.data)
+
+    def test_unified_login_with_2fa_and_otp(self):
+        """Test unified login with 2FA and OTP in single request"""
+        self.user.is_2fa_enabled = True
+        self.user.totp_secret = 'TESTSECRET123456'
+        self.user.save()
+
+        with patch('pyotp.TOTP') as mock_totp:
+            mock_totp_instance = MagicMock()
+            mock_totp.return_value = mock_totp_instance
+            mock_totp_instance.verify.return_value = True
+
+            response = self.client.post(self.url, {
+                'email': 'test@example.com',
+                'password': 'testpass123',
+                'otp': '123456'
+            })
+
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+            self.assertIn('access', response.data)
+            self.assertIn('refresh', response.data)
+
+    def test_unified_login_with_invalid_otp(self):
+        """Test unified login with invalid OTP"""
+        self.user.is_2fa_enabled = True
+        self.user.totp_secret = 'TESTSECRET123456'
+        self.user.save()
+
+        with patch('pyotp.TOTP') as mock_totp:
+            mock_totp_instance = MagicMock()
+            mock_totp.return_value = mock_totp_instance
+            mock_totp_instance.verify.return_value = False
+
+            response = self.client.post(self.url, {
+                'email': 'test@example.com',
+                'password': 'testpass123',
+                'otp': '123456'
+            })
+
+            self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_login_invalid_credentials(self):
         """Test login with invalid credentials"""
@@ -86,12 +125,12 @@ class CustomTokenObtainPairSerializerTestCase(TestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
 
-class Login2FAViewTestCase(TestCase):
-    """Test cases for Login2FA view"""
+class UnifiedLogin2FATestCase(TestCase):
+    """Test cases for unified login with 2FA"""
 
     def setUp(self):
         self.client = APIClient()
-        self.url = reverse('user:login_2fa')
+        self.url = reverse('user:token')
         self.user = User.objects.create_user(
             email='test2fa@example.com',
             password='testpass123',
@@ -101,156 +140,51 @@ class Login2FAViewTestCase(TestCase):
             totp_secret='TESTSECRET123456'
         )
 
-    def test_successful_2fa_login(self):
-        """Test successful 2FA login completion"""
+    def test_otp_validation_numeric_only(self):
+        """Test OTP validation accepts only numeric values"""
+        with patch('pyotp.TOTP') as mock_totp:
+            mock_totp_instance = MagicMock()
+            mock_totp.return_value = mock_totp_instance
+            mock_totp_instance.verify.return_value = False
+
+            response = self.client.post(self.url, {
+                'email': 'test2fa@example.com',
+                'password': 'testpass123',
+                'otp': 'abcdef'
+            })
+
+            self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_otp_validation_length(self):
+        """Test OTP validation for proper length"""
+        # Test short OTP gets padded
         with patch('pyotp.TOTP') as mock_totp:
             mock_totp_instance = MagicMock()
             mock_totp.return_value = mock_totp_instance
             mock_totp_instance.verify.return_value = True
 
             response = self.client.post(self.url, {
-                'user_id': self.user.id,
-                'otp': '123456'
+                'email': 'test2fa@example.com',
+                'password': 'testpass123',
+                'otp': '123'  # Should be padded to 000123
             })
 
             self.assertEqual(response.status_code, status.HTTP_200_OK)
-            self.assertIn('access', response.data)
-            self.assertIn('refresh', response.data)
-            mock_totp_instance.verify.assert_called_once_with('123456', valid_window=1)
+            mock_totp_instance.verify.assert_called_with('000123', valid_window=1)
 
-    def test_invalid_otp(self):
-        """Test 2FA login with invalid OTP"""
-        with patch('pyotp.TOTP') as mock_totp:
-            mock_totp_instance = MagicMock()
-            mock_totp.return_value = mock_totp_instance
-            mock_totp_instance.verify.return_value = False
-
-            response = self.client.post(self.url, {
-                'user_id': self.user.id,
-                'otp': '123456'
-            })
-
-            self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-            self.assertEqual(response.data['error'], 'Invalid or expired OTP')
-
-    def test_invalid_user_id(self):
-        """Test 2FA login with invalid user ID"""
+    def test_empty_otp_requires_2fa_response(self):
+        """Test empty OTP returns requires_2fa response"""
         response = self.client.post(self.url, {
-            'user_id': 99999,
-            'otp': '123456'
-        })
-
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data['error'], 'Invalid user')
-
-    def test_user_without_2fa(self):
-        """Test 2FA login for user without 2FA enabled"""
-        user_no_2fa = User.objects.create_user(
-            email='no2fa@example.com',
-            password='testpass123',
-            fname='No2FA',
-            lname='User'
-        )
-
-        response = self.client.post(self.url, {
-            'user_id': user_no_2fa.id,
-            'otp': '123456'
-        })
-
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data['error'], '2FA not enabled')
-
-    def test_user_without_totp_secret(self):
-        """Test 2FA login for user with 2FA enabled but no TOTP secret"""
-        self.user.totp_secret = None
-        self.user.save()
-
-        response = self.client.post(self.url, {
-            'user_id': self.user.id,
-            'otp': '123456'
-        })
-
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data['error'], '2FA not enabled')
-
-    def test_missing_user_id(self):
-        """Test 2FA login with missing user_id"""
-        response = self.client.post(self.url, {
-            'otp': '123456'
-        })
-
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data['error'], 'Invalid credentials')
-
-    def test_missing_otp(self):
-        """Test 2FA login with missing OTP"""
-        response = self.client.post(self.url, {
-            'user_id': self.user.id
-        })
-
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data['error'], 'Invalid credentials')
-
-    def test_invalid_otp_length(self):
-        """Test 2FA login with invalid OTP length"""
-        response = self.client.post(self.url, {
-            'user_id': self.user.id,
-            'otp': '12345'  # Too short
-        })
-
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-
-        response = self.client.post(self.url, {
-            'user_id': self.user.id,
-            'otp': '1234567'  # Too long
-        })
-
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-
-    def test_empty_otp(self):
-        """Test 2FA login with empty OTP"""
-        response = self.client.post(self.url, {
-            'user_id': self.user.id,
+            'email': 'test2fa@example.com',
+            'password': 'testpass123',
             'otp': ''
         })
 
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data['requires_2fa'])
+        self.assertEqual(response.data['message'], '2FA verification required')
 
-    def test_non_numeric_otp(self):
-        """Test 2FA login with non-numeric OTP"""
-        with patch('pyotp.TOTP') as mock_totp:
-            mock_totp_instance = MagicMock()
-            mock_totp.return_value = mock_totp_instance
-            mock_totp_instance.verify.return_value = False
 
-            response = self.client.post(self.url, {
-                'user_id': self.user.id,
-                'otp': 'abcdef'
-            })
-
-            self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-            self.assertEqual(response.data['error'], 'Invalid or expired OTP')
-
-    def test_wrong_http_method(self):
-        """Test using wrong HTTP method"""
-        response = self.client.get(self.url)
-        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
-
-        response = self.client.put(self.url)
-        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
-
-    def test_totp_exception_handling(self):
-        """Test exception handling in TOTP verification"""
-        with patch('pyotp.TOTP') as mock_totp:
-            mock_totp.side_effect = Exception("TOTP error")
-
-            response = self.client.post(self.url, {
-                'user_id': self.user.id,
-                'otp': '123456'
-            })
-
-            self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-            self.assertEqual(response.data['error'], 'Invalid or expired OTP')
 
 
 class Complete2FALoginFlowTestCase(TestCase):
@@ -259,7 +193,6 @@ class Complete2FALoginFlowTestCase(TestCase):
     def setUp(self):
         self.client = APIClient()
         self.login_url = reverse('user:token')
-        self.login_2fa_url = reverse('user:login_2fa')
         
         # User without 2FA
         self.user_no_2fa = User.objects.create_user(
@@ -290,9 +223,26 @@ class Complete2FALoginFlowTestCase(TestCase):
         self.assertIn('access', response.data)
         self.assertIn('refresh', response.data)
 
-    def test_complete_flow_with_2fa(self):
-        """Test complete login flow for user with 2FA"""
-        # Step 1: Initial login
+    def test_complete_flow_with_2fa_unified(self):
+        """Test unified login flow for user with 2FA"""
+        with patch('pyotp.TOTP') as mock_totp:
+            mock_totp_instance = MagicMock()
+            mock_totp.return_value = mock_totp_instance
+            mock_totp_instance.verify.return_value = True
+
+            response = self.client.post(self.login_url, {
+                'email': 'with2fa@example.com',
+                'password': 'testpass123',
+                'otp': '123456'
+            })
+
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+            self.assertIn('access', response.data)
+            self.assertIn('refresh', response.data)
+
+    def test_complete_flow_with_2fa_two_step(self):
+        """Test two-step login flow for user with 2FA"""
+        # Step 1: Initial login without OTP
         response = self.client.post(self.login_url, {
             'email': 'with2fa@example.com',
             'password': 'testpass123'
@@ -300,16 +250,17 @@ class Complete2FALoginFlowTestCase(TestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data['requires_2fa'])
-        self.assertEqual(response.data['user_id'], self.user_2fa.id)
+        self.assertEqual(response.data['message'], '2FA verification required')
 
-        # Step 2: 2FA verification
+        # Step 2: Complete login with OTP
         with patch('pyotp.TOTP') as mock_totp:
             mock_totp_instance = MagicMock()
             mock_totp.return_value = mock_totp_instance
             mock_totp_instance.verify.return_value = True
 
-            response = self.client.post(self.login_2fa_url, {
-                'user_id': self.user_2fa.id,
+            response = self.client.post(self.login_url, {
+                'email': 'with2fa@example.com',
+                'password': 'testpass123',
                 'otp': '123456'
             })
 
@@ -328,40 +279,21 @@ class Complete2FALoginFlowTestCase(TestCase):
 
     def test_2fa_flow_with_wrong_otp(self):
         """Test 2FA flow with correct credentials but wrong OTP"""
-        # Step 1: Initial login
-        response = self.client.post(self.login_url, {
-            'email': 'with2fa@example.com',
-            'password': 'testpass123'
-        })
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertTrue(response.data['requires_2fa'])
-
-        # Step 2: Wrong OTP
         with patch('pyotp.TOTP') as mock_totp:
             mock_totp_instance = MagicMock()
             mock_totp.return_value = mock_totp_instance
             mock_totp_instance.verify.return_value = False
 
-            response = self.client.post(self.login_2fa_url, {
-                'user_id': self.user_2fa.id,
+            response = self.client.post(self.login_url, {
+                'email': 'with2fa@example.com',
+                'password': 'testpass123',
                 'otp': '123456'
             })
 
             self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-            self.assertEqual(response.data['error'], 'Invalid or expired OTP')
 
     def test_multiple_users_isolation(self):
         """Test that 2FA login is isolated between users"""
-        # Login with first user
-        response = self.client.post(self.login_url, {
-            'email': 'with2fa@example.com',
-            'password': 'testpass123'
-        })
-
-        user_id = response.data['user_id']
-
-        # Try to use different user's ID in 2FA step
         other_user = User.objects.create_user(
             email='other@example.com',
             password='testpass123',
@@ -371,34 +303,38 @@ class Complete2FALoginFlowTestCase(TestCase):
             totp_secret='OTHERSECRET123'
         )
 
+        # Test each user can login independently
         with patch('pyotp.TOTP') as mock_totp:
             mock_totp_instance = MagicMock()
             mock_totp.return_value = mock_totp_instance
             mock_totp_instance.verify.return_value = True
 
-            response = self.client.post(self.login_2fa_url, {
-                'user_id': other_user.id,  # Different user
+            # First user login
+            response1 = self.client.post(self.login_url, {
+                'email': 'with2fa@example.com',
+                'password': 'testpass123',
                 'otp': '123456'
             })
+            self.assertEqual(response1.status_code, status.HTTP_200_OK)
 
-            self.assertEqual(response.status_code, status.HTTP_200_OK)
-            # Should still work as it's a valid user with valid OTP
+            # Second user login
+            response2 = self.client.post(self.login_url, {
+                'email': 'other@example.com',
+                'password': 'testpass123',
+                'otp': '123456'
+            })
+            self.assertEqual(response2.status_code, status.HTTP_200_OK)
 
     def test_token_validity_after_2fa_login(self):
         """Test that tokens work correctly after 2FA login"""
-        # Complete 2FA login
-        response = self.client.post(self.login_url, {
-            'email': 'with2fa@example.com',
-            'password': 'testpass123'
-        })
-
         with patch('pyotp.TOTP') as mock_totp:
             mock_totp_instance = MagicMock()
             mock_totp.return_value = mock_totp_instance
             mock_totp_instance.verify.return_value = True
 
-            response = self.client.post(self.login_2fa_url, {
-                'user_id': self.user_2fa.id,
+            response = self.client.post(self.login_url, {
+                'email': 'with2fa@example.com',
+                'password': 'testpass123',
                 'otp': '123456'
             })
 

@@ -179,7 +179,7 @@ class Verify2FAViewTestCase(TestCase):
         response = self.client.post(self.url, {})
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data['error'], 'Invalid Credentials')
+        self.assertIn('otp', response.data)
 
     def test_verify_2fa_empty_otp(self):
         """Test 2FA verification with empty OTP"""
@@ -188,7 +188,7 @@ class Verify2FAViewTestCase(TestCase):
         response = self.client.post(self.url, {'otp': ''})
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data['error'], 'Invalid Credentials')
+        self.assertIn('otp', response.data)
 
     def test_verify_2fa_wrong_length_otp(self):
         """Test 2FA verification with wrong length OTP"""
@@ -197,7 +197,7 @@ class Verify2FAViewTestCase(TestCase):
         response = self.client.post(self.url, {'otp': '12345'})
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data['error'], 'Invalid Credentials')
+        self.assertEqual(response.data['error'], 'Invalid or expired OTP.')
 
     def test_verify_2fa_wrong_http_method(self):
         """Test using wrong HTTP method"""
@@ -261,7 +261,7 @@ class Verify2FAViewTestCase(TestCase):
         response = self.client.post(self.url, {'otp': '12@#$6'})
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data['error'], 'Invalid or expired OTP.')
+        self.assertIn('otp', response.data)
 
     def test_verify_2fa_unicode_characters(self):
         """Test 2FA verification with unicode characters"""
@@ -270,7 +270,7 @@ class Verify2FAViewTestCase(TestCase):
         response = self.client.post(self.url, {'otp': '12345ñ'})
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data['error'], 'Invalid or expired OTP.')
+        self.assertIn('otp', response.data)
 
     def test_verify_2fa_sql_injection_attempt(self):
         """Test 2FA verification with SQL injection attempt"""
@@ -279,7 +279,7 @@ class Verify2FAViewTestCase(TestCase):
         response = self.client.post(self.url, {'otp': "'; DROP TABLE users; --"})
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data['error'], 'Invalid Credentials')
+        self.assertIn('otp', response.data)
 
     def test_verify_2fa_xss_attempt(self):
         """Test 2FA verification with XSS attempt"""
@@ -288,7 +288,7 @@ class Verify2FAViewTestCase(TestCase):
         response = self.client.post(self.url, {'otp': '<script>alert("xss")</script>'})
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data['error'], 'Invalid Credentials')
+        self.assertIn('otp', response.data)
 
 
 class TwoFAIntegrationTestCase(TestCase):
