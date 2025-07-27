@@ -104,6 +104,14 @@ class CustomTokenObtainPairView(TokenObtainPairView):
                 lockout_response = check_account_lockout(user)
                 if lockout_response:
                     return lockout_response
+
+                # Check if email verification is required
+                if not user.is_email_verified:
+                    return Response({
+                        'requires_email_verification': True,
+                        'message': 'Please verify your email first'
+                    }, status=200)
+
             except get_user_model().DoesNotExist:
                 pass
         return super().post(request, *args, **kwargs)
@@ -172,19 +180,81 @@ class ConfirmEmailOTPView(APIView):
             new_email = serializer.validated_data['new_email']
             otp = serializer.validated_data['otp']
 
-            is_valid, result = validate_otp(request.user, new_email, otp)
-            if not is_valid:
-                return Response({'error': result}, status=429 if "Too many failed attempts" in result else 400)
+            with transaction.atomic():
+                # Get fresh user instance and lock it
+                user = get_user_model().objects.select_for_update().get(pk=request.user.pk)
 
-            # OTP is valid
-            request.user.email = new_email
-            request.user.is_email_verified = True
-            request.user.save()
-            result.delete()  # Delete OTP record
+                # Check if email is already in use by another user
+                if get_user_model().objects.filter(email=new_email).exclude(id=user.id).exists():
+                    return Response({'error': 'Email already in use by another account'}, status=400)
 
-            return Response({'success': 'Email verified and updated'}, status=200)
+                is_valid, result = validate_otp(user, new_email, otp)
+                if not is_valid:
+                    return Response({'error': result}, status=429 if "Too many failed attempts" in result else 400)
+
+                # OTP is valid, update email and verification status
+                user.email = new_email
+                user.is_email_verified = True
+                user.save(update_fields=['email', 'is_email_verified'])
+
+                if result:
+                    result.delete()  # Delete OTP record
+
+                return Response({'success': 'Email verified and updated'}, status=200)
 
         return Response({'error': 'Invalid Request'}, status=400)
+
+
+class PublicEmailVerify(APIView):
+    '''View for verifying public email endpoints'''
+    serializer_class = EmailOTPConfirmSerializer
+
+    def post(self, request):
+        serializer = self.serializer_class(data=request.data)
+        if serializer.is_valid():
+            new_email = serializer.validated_data['new_email']
+            otp = serializer.validated_data['otp']
+
+            # Find user by email and ensure atomic operation
+            with transaction.atomic():
+                try:
+                    user = get_user_model().objects.select_for_update().get(email=new_email)
+                except get_user_model().DoesNotExist:
+                    return Response({'error': 'User not found'}, status=400)
+
+                is_valid, result = validate_otp(user, new_email, otp)
+
+                if not is_valid:
+                    return Response({'error': result}, status=429 if "Too many failed attempts" in result else 400)
+
+                # Only update if not already verified
+                if not user.is_email_verified:
+                    user.is_email_verified = True
+                    user.save(update_fields=['is_email_verified'])
+
+                if result:
+                    result.delete()
+
+                return Response({'success': 'Email verified.'}, status=200)
+        return Response({'error': 'Invalid Request'}, status=400)
+
+
+class PublicResendOTP(APIView):
+    '''View for resending OTP without authentication'''
+
+    def post(self, request):
+        email = request.data.get('email')
+        if not email:
+            return Response({'error': 'Email required'}, status=400)
+
+        try:
+            user = get_user_model().objects.get(email=email)
+        except get_user_model().DoesNotExist:
+            return Response({'error': 'User not found'}, status=400)
+
+        generate_and_send_otp(
+            user, email, subject="Verify Your Email", purpose="registration")
+        return Response({'message': 'OTP sent successfully'}, status=200)
 
 
 class PasswordChangeWithOldPasswordView(APIView):
@@ -199,15 +269,28 @@ class PasswordChangeWithOldPasswordView(APIView):
             new_pass = serializer.validated_data['new_password']
 
             try:
-                if not request.user.check_password(old_pass):
-                    return Response({'error': 'Incorrect Password.'}, status=400)
-                if check_password_reuse(request.user, new_pass):
-                    return Response({'error': 'Please use password other than recent ones'}, status=400)
-                request.user.set_password(new_pass)
-                request.user.save()
-                return Response({'success': 'Successfully Password Changed.'}, status=200)
+                with transaction.atomic():
+                    # Get fresh user instance and lock it
+                    user = get_user_model().objects.select_for_update().get(pk=request.user.pk)
 
-            except Exception:
+                    if not user.check_password(old_pass):
+                        return Response({'error': 'Incorrect Password.'}, status=400)
+                    if check_password_reuse(user, new_pass):
+                        return Response({'error': 'Please use password other than recent ones'}, status=400)
+
+                    # Save old password to history
+                    PasswordHistory.objects.create(
+                        user=user,
+                        password=user.password  # Current hashed password
+                    )
+
+                    user.set_password(new_pass)
+                    # Only update password field
+                    user.save(update_fields=['password'])
+
+                    return Response({'success': 'Successfully Password Changed.'}, status=200)
+
+            except Exception as e:
                 return Response({'error': 'Something Went Wrong. Please try again later.'}, status=400)
 
         return Response({'error': 'Invalid Request'}, status=400)
@@ -237,16 +320,24 @@ class Enable2FAA(APIView):
             return Response({'error': '2FA already Enabled'}, status=400)
 
         try:
-            secret = pyotp.random_base32()
+            with transaction.atomic():
+                # Get fresh user instance and lock it
+                user = get_user_model().objects.select_for_update().get(pk=user.pk)
 
-            # Only save secret, don't enable 2FA yet
-            user.totp_secret = secret
-            user.save()
+                # Double check 2FA not enabled after lock
+                if user.is_2fa_enabled:
+                    return Response({'error': '2FA already Enabled'}, status=400)
 
-            totp_uri = pyotp.TOTP(secret).provisioning_uri(
-                name=user.email,
-                issuer_name="<Your Organization>"
-            )
+                secret = pyotp.random_base32()
+
+                # Only save secret, don't enable 2FA yet
+                user.totp_secret = secret
+                user.save(update_fields=['totp_secret'])
+
+                totp_uri = pyotp.TOTP(secret).provisioning_uri(
+                    name=user.email,
+                    issuer_name="<Your Organization>"
+                )
 
             qr = qrcode.make(totp_uri)
             buffer = io.BytesIO()
@@ -276,14 +367,26 @@ class Verify2FA(APIView):
             otp = serializer.validated_data['otp']
 
             try:
-                totp = pyotp.TOTP(user.totp_secret)
-                if totp.verify(otp, valid_window=1):
-                    # Enable 2FA only after successful verification
-                    user.is_2fa_enabled = True
-                    user.save()
-                    return Response({"success": "2FA enabled successfully."}, status=status.HTTP_200_OK)
-                else:
-                    return Response({"error": "Invalid or expired OTP."}, status=status.HTTP_400_BAD_REQUEST)
+                with transaction.atomic():
+                    # Get fresh user instance and lock it
+                    user = get_user_model().objects.select_for_update().get(pk=user.pk)
+
+                    # Recheck TOTP secret exists after lock
+                    if not user.totp_secret:
+                        return Response({'error': '2FA setup not initiated.'}, status=400)
+
+                    # Check if 2FA was enabled after lock
+                    if user.is_2fa_enabled:
+                        return Response({'error': '2FA already enabled.'}, status=400)
+
+                    totp = pyotp.TOTP(user.totp_secret)
+                    if totp.verify(otp, valid_window=1):
+                        # Enable 2FA only after successful verification
+                        user.is_2fa_enabled = True
+                        user.save(update_fields=['is_2fa_enabled'])
+                        return Response({"success": "2FA enabled successfully."}, status=status.HTTP_200_OK)
+                    else:
+                        return Response({"error": "Invalid or expired OTP."}, status=status.HTTP_400_BAD_REQUEST)
 
             except Exception:
                 return Response({"error": "Invalid or expired OTP."}, status=status.HTTP_400_BAD_REQUEST)
@@ -331,3 +434,5 @@ class UnblockUserView(APIView):
             return Response({'success': 'Account unblocked successfully'}, status=200)
         except get_user_model().DoesNotExist:
             return Response({'error': 'User not found'}, status=404)
+
+

@@ -26,4 +26,6 @@ urlpatterns = [
     path('cancel_2fa_setup', views.Cancel2FASetupView.as_view(),
          name='cancel_2fa_setup'),
     path('unblock_user', views.UnblockUserView.as_view(), name='unblock_user'),
+    path('public-email-verify/', views.PublicEmailVerify.as_view(), name='public_email_verify'),
+    path('public-resend-otp/', views.PublicResendOTP.as_view(), name='public_resend_otp'),
 ]
