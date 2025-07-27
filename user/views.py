@@ -2,7 +2,8 @@ from rest_framework import generics, permissions, status
 from .serializers import (
     UserSerializer, CustomTokenObtainPairSerializer, LogoutSerializer,
     EmailOTPConfirmSerializer, EmailOTPRequestSerializer,
-    PasswordChangeWithOldPasswordSerializer, Verify2FASerializer
+    PasswordChangeWithOldPasswordSerializer, Verify2FASerializer,
+    PasswordResetSerializer, PasswordResetConfirmSerializer
 )
 from rest_framework.settings import api_settings
 from . import permissions as custom_permissions
@@ -24,6 +25,9 @@ import base64
 import io
 import pyotp
 import qrcode
+from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
+from django.utils.encoding import force_bytes
+from django.contrib.auth.tokens import default_token_generator
 
 
 def check_account_lockout(user):
@@ -35,13 +39,20 @@ def check_account_lockout(user):
 
 
 def check_password_reuse(user, raw_password):
-    '''Check for last 10 passwords if reused'''
-    old_passwords = PasswordHistory.objects.filter(
-        user=user).order_by('-changed_at')[:10]
-    for old in old_passwords:
+    """
+    Check if the given raw_password matches any of the user's last 10 passwords.
+    """
+    # Evaluate the queryset to avoid slicing errors
+    recent_passwords = list(
+        PasswordHistory.objects.filter(user=user)
+        .order_by('-changed_at')[:10]
+    )
+
+    for old in recent_passwords:
         if check_password(raw_password, old.password):
             return True
     return False
+
 
 
 class CreateUserView(generics.CreateAPIView):
@@ -436,3 +447,80 @@ class UnblockUserView(APIView):
             return Response({'error': 'User not found'}, status=404)
 
 
+class PasswordResetRequest(APIView):
+    '''APIView for password reset'''
+    serializer_class = PasswordResetSerializer
+
+    def post(self, request):
+        serializer = self.serializer_class(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        user = serializer.get_user()
+
+        uid = urlsafe_base64_encode(force_bytes(user.pk))
+
+        token = default_token_generator.make_token(user)
+
+        # Use frontend URL from request data
+        frontend_url = request.data.get('reset_url', '')
+        if not frontend_url:
+            return Response({'error': 'reset_url is required'}, status=400)
+
+        # Ensure URL includes /static/ and ends with .html
+        frontend_url = frontend_url.rstrip('/')
+        if not frontend_url.endswith('.html'):
+            frontend_url += '/static/reset-password.html'
+        elif '/static/' not in frontend_url:
+            frontend_url = frontend_url.replace(
+                'reset-password.html', 'static/reset-password.html')
+
+        # Construct URL with query parameters for frontend
+        reset_link = f"{frontend_url}?uid={uid}&token={token}"
+
+        send_mail(
+            subject='Password Reset',
+            message=f"Your Personal Password Reset Link is {reset_link}. \nIt will expire in 10 minutes. \nDo not share it with anyone\n",
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[user.email],
+            fail_silently=False,
+        )
+        return Response({'success': 'Successfully sent password reset link.'}, status=200)
+
+
+class PasswordResetConfirm(APIView):
+    '''View for confirming password reset'''
+    serializer_class = PasswordResetConfirmSerializer
+
+    def post(self, request):
+        serializer = self.serializer_class(data=request.data)
+        if not serializer.is_valid():
+            print(serializer.errors)
+            return Response(serializer.errors, status=400)
+        try:
+            uid = serializer.validated_data['uid']
+            new_password = serializer.validated_data['new_password']
+            print(uid, new_password)
+
+            with transaction.atomic():
+
+                user = get_user_model().objects.select_for_update().get(pk=uid)
+
+                if check_password_reuse(user, new_password):
+                    return Response(
+                        {'error': 'Please use a password different from your recent ones'},
+                        status=400
+                    )
+
+                # Save old password in history
+                PasswordHistory.objects.create(
+                    user=user, password=user.password)
+
+                # Set new password
+                user.set_password(new_password)
+                user.save(update_fields=['password'])
+
+                return Response({'success': "Password Reset Successful."}, status=200)
+
+        except Exception as e:
+                print("Exception in PasswordResetConfirm:", e)  # <- Add this
+                return Response({'error': "Something went wrong"}, status=500)

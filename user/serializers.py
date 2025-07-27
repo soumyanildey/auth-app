@@ -4,6 +4,8 @@ from django.contrib.auth import get_user_model
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.utils import timezone
 import pyotp
+from django.utils.http import urlsafe_base64_decode
+from django.contrib.auth.tokens import default_token_generator
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -15,14 +17,18 @@ class UserSerializer(serializers.ModelSerializer):
         fields = [
             'email', 'password', 'password2', 'fname', 'lname', 'phone',
             'dob', 'gender', 'bio', 'profile_pic', 'address', 'city', 'state', 'country', 'postal_code',
-            'language', 'timezone', 'prefers_dark_mode', 'role', 'is_2fa_enabled',
+            'role', 'is_2fa_enabled',
             'is_email_verified', 'is_phone_verified', 'created_at', 'updated_at'
         ]
+
         extra_kwargs = {
             'password': {'write_only': True, 'min_length': 5},
             'created_at': {'read_only': True},
             'updated_at': {'read_only': True},
-            'role': {'read_only': True}
+            'role': {'read_only': True},
+            'is_email_verified': {'read_only': True},
+            'is_phone_verified': {'read_only': True},
+            'is_2fa_enabled': {'read_only': True},
         }
 
     def __init__(self, *args, **kwargs):
@@ -188,3 +194,41 @@ class Verify2FASerializer(serializers.Serializer):
         return value
 
 
+class PasswordResetSerializer(serializers.Serializer):
+    email = serializers.EmailField(required=True)
+
+    def validate(self, attrs):
+        email = attrs.get('email')
+
+        try:
+            self.user = get_user_model().objects.get(email=email)
+        except get_user_model().DoesNotExist:
+            raise serializers.ValidationError(
+                'User Email does not exist.')
+
+        return attrs
+
+    def get_user(self):
+
+        return self.user
+
+
+class PasswordResetConfirmSerializer(serializers.Serializer):
+    '''Serializer for confirming the reset password link'''
+    uid = serializers.CharField()
+    token = serializers.CharField()
+    new_password = serializers.CharField(write_only=True, min_length=5)
+
+    def validate(self, attrs):
+
+        try:
+            uid = urlsafe_base64_decode(attrs['uid']).decode()
+            attrs['uid'] = uid
+            user = get_user_model().objects.get(pk=uid)
+        except Exception:
+            raise serializers.ValidationError('Invalid user')
+
+        if not default_token_generator.check_token(user, attrs['token']):
+            raise serializers.ValidationError('Invalid or Expired Token')
+
+        return attrs

@@ -33,12 +33,16 @@ def save_password_to_history(user):
     if not user.pk:
         return
 
+    # Save the new password to history
     PasswordHistory.objects.create(user=user, password=user.password)
 
-    old_passwords = PasswordHistory.objects.filter(
-        user=user).order_by('-changed_at')
-    if old_passwords.count() > 10:
-        old_passwords[10:].delete()
+    # Keep only the 10 most recent entries
+    recent_ids = PasswordHistory.objects.filter(
+        user=user
+    ).order_by('-changed_at').values_list('id', flat=True)[:10]
+
+    PasswordHistory.objects.filter(user=user).exclude(id__in=recent_ids).delete()
+
 
 
 class CustomUser(AbstractBaseUser, PermissionsMixin):
