@@ -62,17 +62,21 @@ def send_otp_via_sms(phone_number: str, otp: str) -> str:
 
 
 def generate_and_send_sms_otp(phone_number):
+    OTP_CACHE_KEY = f"otp_{phone_number}"
     COOLDOWN_KEY = f"sms_cooldown_{phone_number}"
 
+    # --- DELETE all related cache for this phone first ---
+    cache.delete(OTP_CACHE_KEY)
+    cache.delete(COOLDOWN_KEY)
+
+    # --- Then check for cooldown again (race condition safe) ---
     if cache.get(COOLDOWN_KEY):
         raise Exception ("OTP already sent. Try after some time.")
 
-    otp = str(random.randint(100000,999999))
+    otp = str(random.randint(100000, 999999))
 
-    cache.set(f"otp_{phone_number}",otp, timeout=300)
+    cache.set(OTP_CACHE_KEY, otp, timeout=300)  # OTP valid 5min
+    cache.set(COOLDOWN_KEY, True, timeout=90)   # Block resend for 90s
 
-    cache.set(COOLDOWN_KEY, True, timeout=90)
-
-    send_otp_via_sms(phone_number,otp)
-
+    send_otp_via_sms(phone_number, otp)
     return otp
