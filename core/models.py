@@ -53,7 +53,7 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
         max_length=150, blank=True, default="")
     fname = models.CharField(max_length=150)
     lname = models.CharField(max_length=150)
-    phone = models.CharField(max_length=20)
+    phone = models.CharField(max_length=20,unique=True)
 
     dob = models.DateField(null=True, blank=True)
     gender = models.CharField(null=True, blank=True, choices=[

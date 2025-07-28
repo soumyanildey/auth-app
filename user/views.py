@@ -4,7 +4,8 @@ from .serializers import (
     UserSerializer, CustomTokenObtainPairSerializer, LogoutSerializer,
     EmailOTPConfirmSerializer, EmailOTPRequestSerializer,
     PasswordChangeWithOldPasswordSerializer, Verify2FASerializer,
-    PasswordResetSerializer, PasswordResetConfirmSerializer, UnblockUserSerializer
+    PasswordResetSerializer, PasswordResetConfirmSerializer, UnblockUserSerializer,
+    PhoneOTPVerifySerializer,
 )
 from rest_framework.settings import api_settings
 from . import permissions as custom_permissions
@@ -20,13 +21,13 @@ from django.utils import timezone
 import datetime
 from django.db import transaction
 import secrets
-from .utils import generate_and_send_otp, validate_otp
+from .utils import generate_and_send_otp, validate_otp, generate_and_send_sms_otp
 from django.contrib.auth.hashers import check_password
 import base64
 import io
 import pyotp
 import qrcode
-from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
+from django.utils.http import urlsafe_base64_encode
 from django.utils.encoding import force_bytes
 from django.contrib.auth.tokens import default_token_generator
 
@@ -523,3 +524,64 @@ class PasswordResetConfirm(APIView):
         except Exception as e:
             print("Exception in PasswordResetConfirm:", e)  # <- Add this
             return Response({'error': "Something went wrong"}, status=500)
+
+
+class SendPhoneOTPView(APIView):
+    '''View to send OTP to phone'''
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        phone = request.data.get('phone')
+
+        if not phone:
+            return Response({'detail': 'Phone number is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            user = get_user_model().objects.get(phone=phone)
+        except get_user_model().DoesNotExist:
+            return Response({'detail': 'Phone number not registered.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if user.is_blocked:
+            return Response({'detail': 'User is blocked. Contact support.'}, status=status.HTTP_403_FORBIDDEN)
+
+        try:
+            generate_and_send_sms_otp(phone)
+        except Exception as e:
+            return Response({'detail': str(e)}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+
+        return Response({'detail': 'OTP sent successfully.'}, status=status.HTTP_200_OK)
+
+
+class ConfirmPhoneOTPView(APIView):
+    '''APIView for phone OTP verification'''
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = PhoneOTPVerifySerializer
+
+    def post(self, request):
+        serializer = self.serializer_class(
+            data=request.data,
+            context={'phone': request.data.get('phone')}
+        )
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            with transaction.atomic():
+                user = get_user_model().objects.select_for_update().get(
+                    phone=serializer.validated_data['phone']
+                )
+
+                if user != request.user:
+                    return Response({'detail': 'Unauthorized'}, status=status.HTTP_401_UNAUTHORIZED)
+
+                if user.is_blocked:
+                    return Response({'detail': 'User Blocked. Contact Support.'}, status=status.HTTP_423_LOCKED)
+
+                user.is_phone_verified = True
+                user.save(update_fields=['is_phone_verified'])
+
+                return Response({'success': 'Phone Verified Successfully.'}, status=status.HTTP_200_OK)
+
+        except get_user_model().DoesNotExist:
+            return Response({'detail': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({"detail": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

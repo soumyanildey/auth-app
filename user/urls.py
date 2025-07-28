@@ -34,4 +34,8 @@ urlpatterns = [
          name='password_reset'),
     path('password_reset_confirm/', views.PasswordResetConfirm.as_view(),
          name='password_reset_confirm'),
+    path('request-sms-otp/', views.SendPhoneOTPView.as_view(),
+         name='request-sms-otp'),
+    path('verify-sms-otp/', views.ConfirmPhoneOTPView.as_view(),
+         name='verify-sms-otp'),
 ]

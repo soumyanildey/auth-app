@@ -6,6 +6,7 @@ from django.utils import timezone
 import pyotp
 from django.utils.http import urlsafe_base64_decode
 from django.contrib.auth.tokens import default_token_generator
+from django.core.cache import cache
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -249,6 +250,44 @@ class UnblockUserSerializer(serializers.Serializer):
                 raise serializers.ValidationError('User is not blocked.')
 
         except get_user_model().DoesNotExist:
-            raise serializers.ValidationError('User with this email does not exist.')
+            raise serializers.ValidationError(
+                'User with this email does not exist.')
+
+        return attrs
+
+
+class PhoneOTPVerifySerializer(serializers.Serializer):
+    otp = serializers.CharField(min_length=6, max_length=6, required=True)
+
+    def validate(self, attrs):
+        phone = self.context.get('phone') or self.initial_data.get('phone')
+        otp = attrs.get('otp', None)
+
+        if phone is None:
+            raise serializers.ValidationError('Phone number not provided')
+
+        if not phone.isdigit() or len(phone) < 10:
+            raise serializers.ValidationError('Invalid phone number')
+
+        if not otp or not otp.isdigit():
+            raise serializers.ValidationError(
+                'OTP must be numeric and 6 digits')
+
+        try:
+            user = get_user_model().objects.get(phone=phone)
+        except get_user_model().DoesNotExist:
+            raise serializers.ValidationError('Phone Number not registered.')
+
+        cached_otp = cache.get(f"otp_{phone}")
+
+        if not cached_otp:
+            raise serializers.ValidationError("Expired OTP.")
+
+        if cached_otp != otp:
+            raise serializers.ValidationError('Invalid OTP.')
+
+        cache.delete(f"otp_{phone}")
+
+        attrs['phone'] = phone
 
         return attrs
