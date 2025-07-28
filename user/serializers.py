@@ -232,3 +232,23 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
             raise serializers.ValidationError('Invalid or Expired Token')
 
         return attrs
+
+
+class UnblockUserSerializer(serializers.Serializer):
+    email = serializers.EmailField(required=True)
+
+    def validate(self, attrs):
+        email = attrs.get('email', None)
+
+        if not email:
+            raise serializers.ValidationError('Email is required.')
+
+        try:
+            user = get_user_model().objects.get(email=email)
+            if not user.is_blocked:
+                raise serializers.ValidationError('User is not blocked.')
+
+        except get_user_model().DoesNotExist:
+            raise serializers.ValidationError('User with this email does not exist.')
+
+        return attrs

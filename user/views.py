@@ -1,9 +1,10 @@
 from rest_framework import generics, permissions, status
+from rest_framework.exceptions import PermissionDenied
 from .serializers import (
     UserSerializer, CustomTokenObtainPairSerializer, LogoutSerializer,
     EmailOTPConfirmSerializer, EmailOTPRequestSerializer,
     PasswordChangeWithOldPasswordSerializer, Verify2FASerializer,
-    PasswordResetSerializer, PasswordResetConfirmSerializer
+    PasswordResetSerializer, PasswordResetConfirmSerializer, UnblockUserSerializer
 )
 from rest_framework.settings import api_settings
 from . import permissions as custom_permissions
@@ -52,7 +53,6 @@ def check_password_reuse(user, raw_password):
         if check_password(raw_password, old.password):
             return True
     return False
-
 
 
 class CreateUserView(generics.CreateAPIView):
@@ -425,26 +425,25 @@ class Cancel2FASetupView(APIView):
 class UnblockUserView(APIView):
     '''Admin/Superadmin View for unblocking user'''
     permission_classes = [permissions.IsAuthenticated]
+    serializer_class = UnblockUserSerializer
 
     def check_permissions(self, request):
         super().check_permissions(request)
-        if not (request.user.role == 'admin' or request.user.role == 'superadmin'):
-            from rest_framework.exceptions import PermissionDenied
+        if request.user.role not in ['admin', 'superadmin']:
             raise PermissionDenied('Admin or SuperAdmin role required')
 
     def post(self, request):
-        email = request.data.get('email')
-        if not email:
-            return Response({'error': 'Email Required'}, status=400)
-
+        serializer = self.serializer_class(data=request.data)
+        serializer.is_valid(raise_exception=True)
         try:
-            user = get_user_model().objects.get(email=email)
-            user.failed_login_attempts = 0
-            user.is_blocked = False
-            user.save()
-            return Response({'success': 'Account unblocked successfully'}, status=200)
-        except get_user_model().DoesNotExist:
-            return Response({'error': 'User not found'}, status=404)
+            with transaction.atomic():
+                user = get_user_model().objects.select_for_update().get(
+                    email=serializer.validated_data['email'])
+                user.is_blocked = False
+                user.save(update_fields=['is_blocked'])
+                return Response({'success': f'Successfully Unblocked User with E-Mail {user.email}'}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({'error': f'Error:{str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class PasswordResetRequest(APIView):
@@ -522,5 +521,5 @@ class PasswordResetConfirm(APIView):
                 return Response({'success': "Password Reset Successful."}, status=200)
 
         except Exception as e:
-                print("Exception in PasswordResetConfirm:", e)  # <- Add this
-                return Response({'error': "Something went wrong"}, status=500)
+            print("Exception in PasswordResetConfirm:", e)  # <- Add this
+            return Response({'error': "Something went wrong"}, status=500)
