@@ -126,20 +126,7 @@ SIMPLE_JWT = {
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': config('DEV_DB_NAME'),
-        'USER': config('DEV_DB_USER'),
-        'PASSWORD': config('DEV_DB_PASSWORD'),
-        'HOST': config('DEV_DB_HOST'),
-        'PORT': config('DEV_DB_PORT'),
-        'OPTIONS': {
-            'sslmode': 'disable',
-        },
-    },
-}
-
+DATABASES = {}
 
 if 'test' in sys.argv or 'pytest' in sys.modules:
     DATABASES['default'] = {
@@ -153,6 +140,24 @@ if 'test' in sys.argv or 'pytest' in sys.modules:
             'sslmode': 'disable',
         },
     }
+elif config('DEBUG', default=False, cast=bool):
+    DATABASES['default'] = {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': config('DEV_DB_NAME'),
+        'USER': config('DEV_DB_USER'),
+        'PASSWORD': config('DEV_DB_PASSWORD'),
+        'HOST': config('DEV_DB_HOST'),
+        'PORT': config('DEV_DB_PORT'),
+        'OPTIONS': {
+            'sslmode': 'disable',
+        },
+    }
+else:
+    DATABASES['default'] = dj_database_url.config(
+        default=config('DATABASE_URL'),
+        conn_max_age=600,
+        ssl_require=True
+    )
 
 
 # Password validation
