@@ -1,5 +1,5 @@
 // Modern JavaScript for authentication frontend
-const API_BASE = 'http://localhost:8000/api/user';
+const API_BASE = `${window.location.origin}/api/user`; 
 
 // Load navbar.html into every page
 fetch('navbar.html')
