@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - SecureAuth</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="container">
+        <div id="navbar-placeholder"></div>
+
+
+        <main class="main">
+            <div class="dashboard">
+                <div class="welcome-card">
+                    <h2>Welcome, <span id="userName">User</span>! 🎉</h2>
+                    <p>Your secure dashboard is ready</p>
+                </div>
+
+                <!-- Profile Details -->
+                <div class="profile-section">
+                    <div class="profile-card">
+                        <div class="profile-pic-container">
+                            <img id="profilePic" src="https://via.placeholder.com/120" alt="Profile" class="profile-pic">
+                        </div>
+                        <div class="profile-info">
+                            <h3 id="fullName">Loading...</h3>
+                            <p id="userEmail">Loading...</p>
+                            <p id="userPhone">Loading...</p>
+                            <p id="userRole">Loading...</p>
+                            <button class="btn-primary" onclick="showProfileEditModal()">Edit Profile</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="dashboard-grid">
+                    <div class="dashboard-card">
+                        <div class="card-icon">🔐</div>
+                        <h3>Security Center</h3>
+                        <p>Manage all security settings</p>
+                        <a href="security.html" class="btn-secondary" style="text-decoration: none;">Manage</a>
+                    </div>
+
+
+
+                    <div class="dashboard-card">
+                        <div class="card-icon">🗑️</div>
+                        <h3>Delete Account</h3>
+                        <p>Permanently delete your account</p>
+                        <button class="btn-danger" onclick="showDeleteModal()">Delete</button>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <footer class="footer">
+            <p>Enterprise-grade authentication with ❤️</p>
+        </footer>
+    </div>
+
+
+
+    <!-- Profile Edit Modal -->
+    <div id="profileEditModal" class="modal hidden">
+        <div class="modal-content profile-edit-modal">
+            <h3>Edit Profile</h3>
+            <form id="profileEditForm" class="auth-form">
+                <div class="form-group">
+                    <label for="editProfilePic">Profile Picture</label>
+                    <input type="file" id="editProfilePic" name="profile_pic" accept="image/*">
+                    <small>Upload a new profile picture</small>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="editFname">First Name</label>
+                        <input type="text" id="editFname" name="fname" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="editLname">Last Name</label>
+                        <input type="text" id="editLname" name="lname" required>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="editPhone">Phone</label>
+                    <input type="tel" id="editPhone" name="phone">
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="editDob">Date of Birth</label>
+                        <input type="date" id="editDob" name="dob">
+                    </div>
+                    <div class="form-group">
+                        <label for="editGender">Gender</label>
+                        <select id="editGender" name="gender">
+                            <option value="">Select</option>
+                            <option value="male">Male</option>
+                            <option value="female">Female</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="editBio">Bio</label>
+                    <textarea id="editBio" name="bio" rows="3"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="editAddress">Address</label>
+                    <input type="text" id="editAddress" name="address">
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="editCity">City</label>
+                        <input type="text" id="editCity" name="city">
+                    </div>
+                    <div class="form-group">
+                        <label for="editState">State</label>
+                        <input type="text" id="editState" name="state">
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="editCountry">Country</label>
+                        <input type="text" id="editCountry" name="country">
+                    </div>
+                    <div class="form-group">
+                        <label for="editPostalCode">Postal Code</label>
+                        <input type="text" id="editPostalCode" name="postal_code">
+                    </div>
+                </div>
+
+                <div class="modal-actions">
+                    <button type="submit" class="btn-primary">Update Profile</button>
+                    <button type="button" class="btn-secondary" onclick="closeModal('profileEditModal')">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Delete Account Modal -->
+    <div id="deleteModal" class="modal hidden">
+        <div class="modal-content">
+            <h3 style="color: #ef4444;">Delete Account</h3>
+            <p><strong>Warning:</strong> This action cannot be undone. All your data will be permanently deleted.</p>
+            <form id="deleteForm">
+                <div class="form-group">
+                    <label for="deletePassword">Enter your password to confirm:</label>
+                    <input type="password" id="deletePassword" name="password" required>
+                </div>
+                <div class="modal-actions">
+                    <button type="submit" class="btn-danger">Delete My Account</button>
+                    <button type="button" class="btn-secondary" onclick="closeModal('deleteModal')">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Access Denied Modal -->
+    <div id="accessDeniedModal" class="modal hidden">
+        <div class="modal-content">
+            <h3 style="color: #ef4444;">Access Denied</h3>
+            <p>You don't have permission to access the Admin Panel.</p>
+            <p><strong>Required:</strong> Admin or SuperAdmin role</p>
+            <div class="modal-actions">
+                <button type="button" class="btn-secondary" onclick="closeModal('accessDeniedModal')">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="message" class="message hidden"></div>
+
+    <script src="js/auth.js"></script>
+    <script>
+        const checkAdminAccess = async () => {
+            try {
+                const { result } = await apiCall('/me/');
+                if (result.role === 'admin' || result.role === 'superadmin') {
+                    window.location.href = 'admin.html';
+                } else {
+                    showAccessDeniedModal();
+                }
+            } catch (error) {
+                showMessage('Unable to verify permissions', 'error');
+            }
+        };
+
+        const showAccessDeniedModal = () => {
+            document.getElementById('accessDeniedModal').classList.remove('hidden');
+        };
+    </script>
+</body>
+</html>

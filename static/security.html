@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Security - SecureAuth</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+    <div class="container">
+        <div id="navbar-placeholder"></div>
+
+
+        <main class="main">
+            <div class="dashboard">
+                <div class="welcome-card">
+                    <h2>Security Center 🛡️</h2>
+                    <p>Manage your account security settings</p>
+                </div>
+
+                <div class="dashboard-grid">
+                    <!-- Password Change -->
+                    <div class="dashboard-card">
+                        <div class="card-icon">🔑</div>
+                        <h3>Change Password</h3>
+                        <p>Update your account password</p>
+                        <button class="btn-secondary" onclick="showPasswordModal()">Change</button>
+                    </div>
+
+                    <!-- 2FA Management -->
+                    <div class="dashboard-card">
+                        <div class="card-icon">📱</div>
+                        <h3>Two-Factor Auth</h3>
+                        <p id="2faStatus">Loading...</p>
+                        <button class="btn-secondary" id="2faBtn" onclick="toggle2FA()">Manage</button>
+                    </div>
+
+                    <!-- Email Change -->
+                    <div class="dashboard-card">
+                        <div class="card-icon">📧</div>
+                        <h3>Email Change</h3>
+                        <p>Update your email address</p>
+                        <button class="btn-secondary" onclick="showEmailModal()">Change</button>
+                    </div>
+
+                    <!-- Account Status -->
+                    <div class="dashboard-card">
+                        <div class="card-icon">👤</div>
+                        <h3>Account Status</h3>
+                        <p id="accountStatus">Active</p>
+                        <button class="btn-secondary" onclick="showAccountModal()">Details</button>
+                    </div>
+                    <!--SMS Verification-->
+                    <div class="dashboard-card">
+                        <div class="card-icon">📩</div>
+                        <h3>SMS Verification</h3>
+                        <p>Verify Your Phone Number</p>
+                        <button class="btn-primary" onclick="showModal('smsModal')">Enable</button>
+                    </div>
+
+                </div>
+            </div>
+        </main>
+
+        <footer class="footer">
+            <p>Enterprise-grade authentication with ❤️</p>
+        </footer>
+    </div>
+
+    <!-- Password Change Modal -->
+    <div id="passwordModal" class="modal hidden">
+        <div class="modal-content">
+            <h3>Change Password</h3>
+            <form id="passwordForm">
+                <div class="form-group">
+                    <label for="oldPassword">Current Password</label>
+                    <input type="password" id="oldPassword" name="old_password" required>
+                </div>
+                <div class="form-group">
+                    <label for="newPassword">New Password</label>
+                    <input type="password" id="newPassword" name="new_password" required>
+                </div>
+                <div class="modal-actions">
+                    <button type="submit" class="btn-primary">Update</button>
+                    <button type="button" class="btn-secondary" onclick="closeModal('passwordModal')">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Email Change Modal -->
+    <div id="emailModal" class="modal hidden">
+        <div class="modal-content">
+            <h3>Change Email</h3>
+            <form id="emailForm">
+                <div class="form-group">
+                    <label for="newEmail">New Email</label>
+                    <input type="email" id="newEmail" name="new_email" required>
+                </div>
+                <div class="modal-actions">
+                    <button type="submit" class="btn-primary">Send OTP</button>
+                    <button type="button" class="btn-secondary" onclick="closeModal('emailModal')">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Email OTP Verification Modal -->
+    <div id="emailOtpModal" class="modal hidden">
+        <div class="modal-content">
+            <h3>Verify Email OTP</h3>
+            <form id="emailOtpForm">
+                <div class="form-group">
+                    <label for="emailOtp">Enter OTP</label>
+                    <input type="text" id="emailOtp" name="otp" maxlength="6" required>
+                    <small>Check your new email for the verification code</small>
+                </div>
+                <input type="hidden" id="hiddenNewEmail" name="new_email">
+                <div class="modal-actions">
+                    <button type="submit" class="btn-primary">Verify</button>
+                    <button type="button" class="btn-secondary" onclick="closeModal('emailOtpModal')">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 2FA Setup Modal -->
+    <div id="2faModal" class="modal hidden">
+        <div class="modal-content">
+            <h3>Setup Two-Factor Authentication</h3>
+            <div id="qrCode" class="qr-container hidden">
+                <p>Scan this QR code with your authenticator app:</p>
+                <img id="qrImage" src="" alt="QR Code">
+            </div>
+            <div class="form-group">
+                <label for="verifyOtp">Enter verification code:</label>
+                <input type="text" id="verifyOtp" maxlength="6" placeholder="123456">
+            </div>
+            <div class="modal-actions">
+                <button class="btn-primary" onclick="verify2FA()">Verify</button>
+                <button class="btn-secondary" onclick="cancel2FASetup()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!--SMS Verification-->
+    <div id="smsModal" class="modal hidden">
+        <div class="modal-content sms-modal-content">
+            <span class="modal-close" onclick="closeModal('smsModal')" style="cursor: pointer;"><i class="fa-solid fa-2x fa-xmark"></i></span>
+            <div class="sms-modal-header">
+                <div class="sms-modal-icon">📩</div>
+                <h2>Enable SMS Verification</h2>
+                <p class="sms-modal-desc">
+                    Add an extra layer of security.<br>
+                    One-Time Passwords will be sent to:
+                    <span id="maskedPhone" class="sms-modal-phone">Loading...</span>
+                    <a href="dashboard.html" class="sms-modal-edit">(Edit)</a>
+                </p>
+            </div>
+            <form id="smsSetupForm" class="auth-form sms-form" autocomplete="off">
+                <div class="form-group">
+                    <button type="button" id="sendSmsOtpBtn" class="btn-primary full-width">
+                        <span class="btn-text">Send OTP</span>
+                        <span class="btn-loader hidden">&#8635;</span>
+                    </button>
+                </div>
+                <div class="form-group">
+                    <input type="text" id="smsOtp" name="otp" placeholder="Enter OTP" required
+                        autocomplete="one-time-code" maxlength="8" />
+                </div>
+                <div class="form-group modal-actions">
+                    <button type="submit" id="verifySmsOtpBtn" class="btn-secondary full-width">
+                        <span class="btn-text">Verify OTP</span>
+                        <span class="btn-loader hidden">&#8635;</span>
+                    </button>
+                </div>
+            </form>
+            <div id="smsStatus" style="margin-top:10px;min-height:1.5em;"></div>
+            <div class="sms-hint">
+                <span>Didn’t get a code? <a href="#" id="resendSmsOtpLink">Resend</a></span>
+            </div>
+        </div>
+    </div>
+
+
+
+
+    <div id="message" class="message hidden"></div>
+
+    <script src="js/auth.js"></script>
+    <script src="https://kit.fontawesome.com/d9c59c9f93.js" crossorigin="anonymous"></script>
+</body>
+
+</html>

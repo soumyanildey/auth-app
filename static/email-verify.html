@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verify Email - SecureAuth</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1 class="logo">🔐 SecureAuth</h1>
+            <nav class="nav">
+                <a href="login.html" class="nav-link">Login</a>
+                <a href="register.html" class="nav-link">Register</a>
+            </nav>
+        </header>
+        
+        <main class="main">
+            <div class="auth-card">
+                <div class="card-header">
+                    <h2>Verify Your Email 📧</h2>
+                    <p>Check your inbox for verification code</p>
+                </div>
+                
+                <form id="emailVerifyForm" class="auth-form">
+                    <div class="form-group">
+                        <label for="otp">Verification Code</label>
+                        <input type="text" id="otp" name="otp" maxlength="6" placeholder="Enter 6-digit code" required>
+                    </div>
+                    
+                    <button type="submit" class="btn-primary" id="verifyBtn">
+                        <span class="btn-text">Verify Email</span>
+                        <span class="btn-loader hidden">🔄</span>
+                    </button>
+                    
+                    <div class="form-links">
+                        <a href="#" onclick="resendOTP()">Didn't receive code? Resend</a>
+                    </div>
+                </form>
+                
+                <div id="message" class="message hidden"></div>
+            </div>
+        </main>
+        
+        <footer class="footer">
+            <p>Enterprise-grade authentication with ❤️</p>
+        </footer>
+    </div>
+    
+    <script>
+        const resendOTP = async () => {
+            const email = localStorage.getItem('temp_email');
+            if (!email) {
+                showMessage('Email not found. Please register again.', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch('http://localhost:8000/api/user/public-resend-otp/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: email })
+                });
+                
+                if (response.ok) {
+                    showMessage('Verification code sent!', 'success');
+                } else {
+                    showMessage('Failed to send code', 'error');
+                }
+            } catch (error) {
+                showMessage('Network error', 'error');
+            }
+        };
+        
+        document.getElementById('emailVerifyForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const otp = document.getElementById('otp').value;
+            const email = localStorage.getItem('temp_email');
+            
+            if (!email) {
+                showMessage('Email not found. Please register again.', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch('http://localhost:8000/api/user/public-email-verify/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ new_email: email, otp })
+                });
+                
+                if (response.ok) {
+                    localStorage.removeItem('temp_email');
+                    showMessage('Email verified! Please login again.', 'success');
+                    setTimeout(() => window.location.href = 'login.html', 2000);
+                } else {
+                    showMessage('Invalid verification code', 'error');
+                }
+            } catch (error) {
+                showMessage('Verification failed', 'error');
+            }
+        });
+        
+        const showMessage = (text, type = 'info') => {
+            const messageEl = document.getElementById('message');
+            messageEl.textContent = text;
+            messageEl.className = `message ${type}`;
+            messageEl.classList.remove('hidden');
+            setTimeout(() => messageEl.classList.add('hidden'), 5000);
+        };
+    </script>
+</body>
+</html>

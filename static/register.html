@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register - SecureAuth</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1 class="logo">🔐 SecureAuth</h1>
+            <nav class="nav">
+                <a href="login.html" class="nav-link">Login</a>
+                <a href="register.html" class="nav-link">Register</a>
+            </nav>
+        </header>
+        
+        <main class="main">
+            <div class="auth-card compact">
+                <div class="card-header">
+                    <h2>Join SecureAuth! 🚀</h2>
+                    <p>Create your secure account</p>
+                </div>
+                
+                <form id="registerForm" class="auth-form">
+                    <div class="form-row">
+                        <div class="form-group half">
+                            <label for="fname">First Name</label>
+                            <input type="text" id="fname" name="fname" required>
+                        </div>
+                        <div class="form-group half">
+                            <label for="lname">Last Name</label>
+                            <input type="text" id="lname" name="lname" required>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group half">
+                            <label for="email">Email</label>
+                            <input type="email" id="email" name="email" required>
+                        </div>
+                        <div class="form-group half">
+                            <label for="phone">Phone</label>
+                            <input type="tel" id="phone" name="phone" required>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group half">
+                            <label for="password">Password</label>
+                            <input type="password" id="password" name="password" required>
+                            <div class="password-strength" id="passwordStrength"></div>
+                        </div>
+                        <div class="form-group half">
+                            <label for="password2">Confirm Password</label>
+                            <input type="password" id="password2" name="password2" required>
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="btn-primary" id="registerBtn">
+                        <span class="btn-text">Create Account</span>
+                        <span class="btn-loader hidden">🔄</span>
+                    </button>
+                    
+                    <div class="form-links">
+                        <a href="login.html">Already have an account? Sign in</a>
+                    </div>
+                </form>
+                
+                <div id="message" class="message hidden"></div>
+            </div>
+        </main>
+        
+        <footer class="footer">
+            <p>Enterprise-grade authentication with ❤️</p>
+        </footer>
+    </div>
+    
+    <script src="js/auth.js"></script>
+</body>
+</html>

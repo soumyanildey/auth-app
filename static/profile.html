@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Profile - SecureAuth</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="container">
+        <div id="navbar-placeholder"></div>
+
+
+        <main class="main">
+            <div class="dashboard">
+                <div class="welcome-card">
+                    <h2>Complete Profile Details 👤</h2>
+                    <p>View all your account information</p>
+                </div>
+
+                <div class="profile-details-grid">
+                    <div class="detail-card">
+                        <h3>Personal Information</h3>
+                        <div class="detail-item">
+                            <strong>Full Name:</strong> <span id="displayFullName">Loading...</span>
+                        </div>
+                        <div class="detail-item">
+                            <strong>Email:</strong> <span id="displayEmail">Loading...</span>
+                        </div>
+                        <div class="detail-item">
+                            <strong>Phone:</strong> <span id="displayPhone">Loading...</span>
+                        </div>
+                        <div class="detail-item">
+                            <strong>Date of Birth:</strong> <span id="displayDob">Loading...</span>
+                        </div>
+                        <div class="detail-item">
+                            <strong>Gender:</strong> <span id="displayGender">Loading...</span>
+                        </div>
+                    </div>
+
+                    <div class="detail-card">
+                        <h3>Address Information</h3>
+                        <div class="detail-item">
+                            <strong>Address:</strong> <span id="displayAddress">Loading...</span>
+                        </div>
+                        <div class="detail-item">
+                            <strong>City:</strong> <span id="displayCity">Loading...</span>
+                        </div>
+                        <div class="detail-item">
+                            <strong>State:</strong> <span id="displayState">Loading...</span>
+                        </div>
+                        <div class="detail-item">
+                            <strong>Country:</strong> <span id="displayCountry">Loading...</span>
+                        </div>
+                        <div class="detail-item">
+                            <strong>Postal Code:</strong> <span id="displayPostalCode">Loading...</span>
+                        </div>
+                    </div>
+
+                    <div class="detail-card">
+                        <h3>Account Information</h3>
+                        <div class="detail-item">
+                            <strong>Role:</strong> <span id="displayRole">Loading...</span>
+                        </div>
+                        <div class="detail-item">
+                            <strong>Email Verified:</strong> <span id="displayEmailVerified">Loading...</span>
+                        </div>
+                        <div class="detail-item">
+                            <strong>2FA Enabled:</strong> <span id="display2FA">Loading...</span>
+                        </div>
+                        <div class="detail-item">
+                            <strong>Account Created:</strong> <span id="displayCreatedAt">Loading...</span>
+                        </div>
+                        <div class="detail-item">
+                            <strong>Last Updated:</strong> <span id="displayUpdatedAt">Loading...</span>
+                        </div>
+                    </div>
+
+                    <div class="detail-card">
+                        <h3>Bio</h3>
+                        <div class="bio-content">
+                            <p id="displayBio">Loading...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <footer class="footer">
+            <p>Enterprise-grade authentication with ❤️</p>
+        </footer>
+    </div>
+
+    <script src="js/auth.js"></script>
+</body>
+</html>

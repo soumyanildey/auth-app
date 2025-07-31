@@ -123,6 +123,5 @@ Thumbs.db
 # Project specific
 media/
 staticfiles/
-static/
 test_neondb
 *.sqlite3

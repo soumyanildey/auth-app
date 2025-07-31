@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel - SecureAuth</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="container">
+        <div id="navbar-placeholder"></div>
+
+
+        <main class="main">
+            <div class="dashboard">
+                <div class="welcome-card">
+                    <h2>Admin Panel 👨‍💼</h2>
+                    <p>Manage users and system settings</p>
+                </div>
+
+                <div class="dashboard-grid">
+                    <!-- User Management -->
+                    <div class="dashboard-card">
+                        <div class="card-icon">👥</div>
+                        <h3>User Management</h3>
+                        <p>View and manage users</p>
+                        <button class="btn-secondary" onclick="showUsersModal()">Manage</button>
+                    </div>
+
+                    <!-- Unblock Users -->
+                    <div class="dashboard-card">
+                        <div class="card-icon">🔓</div>
+                        <h3>Unblock Users</h3>
+                        <p>Unblock locked accounts</p>
+                        <button class="btn-secondary" onclick="showUnblockModal()">Unblock</button>
+                    </div>
+
+                    <!-- System Stats -->
+                    <div class="dashboard-card">
+                        <div class="card-icon">📊</div>
+                        <h3>System Stats</h3>
+                        <p>View system statistics</p>
+                        <button class="btn-secondary" onclick="showStatsModal()">View</button>
+                    </div>
+
+                    <!-- API Testing -->
+                    <div class="dashboard-card">
+                        <div class="card-icon">🧪</div>
+                        <h3>API Testing</h3>
+                        <p>Test throttling limits</p>
+                        <button class="btn-secondary" onclick="testThrottling()">Test</button>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <footer class="footer">
+            <p>Enterprise-grade authentication with ❤️</p>
+        </footer>
+    </div>
+
+    <!-- Unblock User Modal -->
+    <div id="unblockModal" class="modal hidden">
+        <div class="modal-content">
+            <h3>Unblock User Account</h3>
+            <form id="unblockForm">
+                <div class="form-group">
+                    <label for="unblockEmail">User Email</label>
+                    <input type="email" id="unblockEmail" name="email" required>
+                </div>
+                <div class="modal-actions">
+                    <button type="submit" class="btn-primary">Unblock</button>
+                    <button type="button" class="btn-secondary" onclick="closeModal('unblockModal')">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Users List Modal -->
+    <div id="usersModal" class="modal hidden">
+        <div class="modal-content" style="max-width: 600px;">
+            <h3>User Management</h3>
+            <div id="usersList">
+                <p>Loading users...</p>
+            </div>
+            <button class="btn-secondary" onclick="closeModal('usersModal')">Close</button>
+        </div>
+    </div>
+
+    <!-- Stats Modal -->
+    <div id="statsModal" class="modal hidden">
+        <div class="modal-content">
+            <h3>System Statistics</h3>
+            <div id="systemStats">
+                <p><strong>Total Users:</strong> <span id="totalUsers">-</span></p>
+                <p><strong>Active Users:</strong> <span id="activeUsers">-</span></p>
+                <p><strong>Blocked Users:</strong> <span id="blockedUsers">-</span></p>
+                <p><strong>2FA Enabled:</strong> <span id="twoFAUsers">-</span></p>
+            </div>
+            <button class="btn-secondary" onclick="closeModal('statsModal')">Close</button>
+        </div>
+    </div>
+
+    <div id="message" class="message hidden"></div>
+
+    <script src="js/auth.js"></script>
+</body>
+</html>
