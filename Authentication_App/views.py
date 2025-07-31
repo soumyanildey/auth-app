@@ -1,7 +1,6 @@
-import os
 from django.http import FileResponse
-from django.conf import settings
+from pathlib import Path
 
-def serve_static_index(request):
-    index_path = os.path.join(settings.BASE_DIR, 'static', 'index.html')
-    return FileResponse(open(index_path, 'rb'), content_type='text/html')
+def serve_static_html(request, filename="index.html"):
+    path = Path(__file__).resolve().parent.parent / "static" / filename
+    return FileResponse(open(path, 'rb'), content_type='text/html')

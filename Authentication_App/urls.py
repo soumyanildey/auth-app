@@ -32,7 +32,8 @@ urlpatterns = [
         name='api-docs',
     ),
     path('api/user/', include('user.urls')),
-    path('',views.serve_static_index),
+    path('',views.serve_static_html),
+    path('<str:filename>', views.serve_static_html),
 ]
 
 # Serve media and static files in development
