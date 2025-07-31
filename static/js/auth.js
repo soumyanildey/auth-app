@@ -1,19 +1,29 @@
 // Modern JavaScript for authentication frontend
-const API_BASE = `${window.location.origin}/api/user`; 
+const API_BASE = `${window.location.origin}/api/user`;
 
 // Load navbar.html into every page
 fetch('navbar.html')
-  .then(res => res.text())
+  .then(res => {
+    if (!res.ok) throw new Error('Navbar not found');
+    return res.text();
+  })
   .then(html => {
-     document.getElementById('navbar-placeholder').innerHTML = html;
+    const placeholder = document.getElementById('navbar-placeholder');
+    if (placeholder) {
+      placeholder.innerHTML = html;
+    }
+  })
+  .catch(err => {
+    console.warn('Optional navbar skipped:', err.message);
   });
+
 
 
 
 // Check server connectivity
 const checkServerConnection = async () => {
     try {
-        const response = await fetch('http://localhost:8000/admin/', {
+        const response = await fetch(`${window.location.origin}/admin/`, {
             method: 'GET',
             mode: 'cors'
         });
@@ -37,7 +47,7 @@ const getCSRFToken = async () => {
         }
 
         // If not found, fetch new token from Django admin page
-        const response = await fetch('http://localhost:8000/admin/', {
+        const response = await fetch(`${window.location.origin}/admin/`, {
             method: 'GET',
             credentials: 'include',
             mode: 'cors',

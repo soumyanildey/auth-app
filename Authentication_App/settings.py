@@ -233,11 +233,13 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:3000",
     "http://127.0.0.1:5500",  # Live Server
     "http://localhost:5500",
+    "https://secureauth-3ukj.onrender.com"
 ]
 CORS_ALLOW_CREDENTIALS = True
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:5500",
     "http://127.0.0.1:5500",
+    "https://secureauth-3ukj.onrender.com"
 ]
 CORS_ALLOW_ALL_ORIGINS = DEBUG  # Allow all origins in debug mode
 CORS_ALLOWED_HEADERS = [
