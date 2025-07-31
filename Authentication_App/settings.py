@@ -31,7 +31,7 @@ SECRET_KEY = config('SECRET_KEY')
 DEBUG = config('DEBUG', default=False, cast=bool)
 
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'https://secureauth-3ukj.onrender.com']
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'secureauth-3ukj.onrender.com']
 APPEND_SLASH = True
 
 
