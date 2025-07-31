@@ -87,14 +87,15 @@ WSGI_APPLICATION = 'Authentication_App.wsgi.application'
 
 
 CACHES = {
-    "default": {
-        "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": "redis://127.0.0.1:6379/1",  # Use DB 1 of Redis
-        "OPTIONS": {
-            "CLIENT_CLASS": "django_redis.client.DefaultClient",
-        }
+  "default": {
+    "BACKEND": "django_redis.cache.RedisCache",
+    "LOCATION": config("REDIS_URL"),
+    "OPTIONS": {
+      "CLIENT_CLASS": "django_redis.client.DefaultClient",
     }
+  }
 }
+
 
 
 REST_FRAMEWORK = {
@@ -219,9 +220,9 @@ EMAIL_USE_TLS = config('EMAIL_USE_TLS', cast=bool)
 DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL')
 
 
-if 'test' in sys.argv:
-    CACHES['default']['LOCATION'] = 'redis://127.0.0.1:6379/5'
-    REST_FRAMEWORK['DEFAULT_CACHE_BACKEND'] = 'default'  #
+# if 'test' in sys.argv:
+#     CACHES['default']['LOCATION'] = 'redis://127.0.0.1:6379/5'
+#     REST_FRAMEWORK['DEFAULT_CACHE_BACKEND'] = 'default'  #
 
 
 # Security Headers
