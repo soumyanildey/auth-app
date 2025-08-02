@@ -80,9 +80,7 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     is_2fa_enabled = models.BooleanField(default=False)
 
     # Security & Devices
-    last_ip = models.GenericIPAddressField(null=True, blank=True)
-    last_device = models.CharField(max_length=255, blank=True)
-    last_login_location = models.CharField(max_length=255, blank=True)
+
     failed_login_attempts = models.IntegerField(default=0)
     last_failed_login = models.DateTimeField(null=True, blank=True)
     totp_secret = models.CharField(max_length=32,blank=True,null=True)
@@ -156,3 +154,28 @@ class PasswordHistory(models.Model):
 
     def __str__(self):
         return f"Password Changed for {self.user} at {self.changed_at}"
+
+class ActivityLog(models.Model):
+    '''Model for activity tracking'''
+    user = models.ForeignKey(AUTH_USER_MODEL, on_delete=models.CASCADE)
+    action = models.CharField(max_length=100,choices=[
+        ('login','Login'),
+        ('logout','Logout'),
+        ('password_change','Password Change'),
+        ('email_change','Email Change'),
+        ('profile_update','Profile Update'),
+        ('2fa_enable','2FA Enable'),
+        ('2fa_disable','2FA Disable'),
+        ('account_block','Account Block'),
+        ('account_unblock','Account Unblock'),
+        ('otp_request','OTP Request'),
+        ('otp_verify','OTP Verify'),
+    ])
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_device = models.CharField(max_length=255, blank=True)
+    location = models.CharField(max_length=255, blank=True)
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-timestamp']
+

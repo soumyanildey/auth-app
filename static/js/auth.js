@@ -458,7 +458,12 @@ if (status === 400) {
                 showMessage('Password reset successful! You can now login. 🔐', 'success');
                 setTimeout(() => window.location.href = 'login.html', 2000);
             } else {
-                showMessage(result.detail || 'Failed to reset password', 'error');
+                const errorMsg = result?.error || result?.detail || 'Failed to reset password';
+                if (errorMsg.includes('recent')) {
+                    showMessage('⚠️ Cannot reuse recent passwords. Please choose a different password.', 'error');
+                } else {
+                    showMessage(errorMsg, 'error');
+                }
             }
         } catch (error) {
             console.error('Password reset confirm error:', error);
@@ -542,10 +547,7 @@ const showUsersModal = () => {
     loadUsersList();
 };
 
-const showStatsModal = () => {
-    document.getElementById('statsModal').classList.remove('hidden');
-    loadSystemStats();
-};
+
 
 const showDeleteModal = () => {
     document.getElementById('deleteModal').classList.remove('hidden');
@@ -748,9 +750,7 @@ const loadProfileEditData = async () => {
     }
 };
 
-const closeModal = (modalId) => {
-    document.getElementById(modalId).classList.add('hidden');
-};
+
 
 // Logout function
 const logout = async () => {
@@ -881,16 +881,23 @@ if (document.getElementById('passwordForm')) {
         const data = Object.fromEntries(formData);
 
         try {
-            const { status } = await apiCall('/password_change_with_old_password', data);
+            const { data: result, status } = await apiCall('/password_change_with_old_password', data);
             if (status === 200) {
-                showMessage('Password changed successfully! 🔑', 'success');
-                closeModal('passwordModal');
-                e.target.reset();
+                showModalMessage('passwordModalMessage', 'Password changed successfully! 🔑', 'success');
+                setTimeout(() => {
+                    closeModal('passwordModal');
+                    e.target.reset();
+                }, 1500);
             } else {
-                showMessage('Failed to change password', 'error');
+                const errorMsg = result?.error || result?.detail || 'Failed to change password';
+                if (errorMsg.includes('recent ones')) {
+                    showModalMessage('passwordModalMessage', '⚠️ Cannot reuse recent passwords. Please choose a different password that you haven\'t used recently.', 'error');
+                } else {
+                    showModalMessage('passwordModalMessage', errorMsg, 'error');
+                }
             }
         } catch (error) {
-            showMessage('Failed to change password', 'error');
+            showModalMessage('passwordModalMessage', 'Failed to change password', 'error');
         }
     });
 }
@@ -968,18 +975,43 @@ if (document.getElementById('unblockForm')) {
 // Load users list
 const loadUsersList = async () => {
     try {
-        const { data: users, status } = await apiCall('/admin/', null, 'GET');
+        // Get current user info to determine role
+        const { data: currentUser } = await apiCall('/me/', null, 'GET');
+        const endpoint = currentUser.role === 'superadmin' ? '/superadmin/' : '/admin/';
+        const roleText = currentUser.role === 'superadmin' ? 'Super Admin View (Users Only)' : 'Admin View (Users Only)';
+        
+        document.getElementById('roleIndicator').textContent = roleText;
+        
+        const { data: users, status } = await apiCall(endpoint, null, 'GET');
         if (status === 200) {
+            console.log('Users data:', users); // Debug log
+            document.getElementById('usersCount').textContent = `${users.length} users`;
+            
             const usersList = document.getElementById('usersList');
-            usersList.innerHTML = users.map(user => `
-                <div style="padding: 10px; border: 1px solid #ddd; margin: 5px 0; border-radius: 5px;">
-                    <strong>${user.fname} ${user.lname}</strong><br>
-                    <small>${user.email} | Role: ${user.role} | 2FA: ${user.is_2fa_enabled ? 'Yes' : 'No'}</small>
+            usersList.innerHTML = users.map((user, index) => `
+                <div class="user-card">
+                    <div class="user-main">
+                        <div class="user-info">
+                            <div class="user-name">${user.fname} ${user.lname}</div>
+                            <div class="user-details">
+                                <span>📧 ${user.email}</span>
+                                <span class="user-badge role-${user.role}">${user.role.toUpperCase()}</span>
+                                <span class="${user.is_active ? 'status-active' : 'status-blocked'}">
+                                    ${user.is_active ? '✅ Active' : '🚫 Blocked'}
+                                </span>
+                                <span>🛡️ 2FA: ${user.is_2fa_enabled ? 'On' : 'Off'}</span>
+                                <span>📱 Phone: ${user.phone || 'Not set'}</span>
+                            </div>
+                        </div>
+                        <div class="user-actions">
+                            <button class="btn-action delete" onclick="deleteUser('${user.email}')" title="Delete User">🗑️</button>
+                        </div>
+                    </div>
                 </div>
             `).join('');
         }
     } catch (error) {
-        document.getElementById('usersList').innerHTML = '<p>Failed to load users</p>';
+        document.getElementById('usersList').innerHTML = '<div class="user-card"><p style="color: #d32f2f; text-align: center;">❌ Failed to load users</p></div>';
     }
 };
 
@@ -1047,6 +1079,11 @@ document.addEventListener('DOMContentLoaded', () => {
             link.style.color = 'white';
         }
     });
+    
+    // Initialize Google Auth if on login page
+    if (document.getElementById('googleLoginBtn')) {
+        initGoogleAuth();
+    }
 });
 
 
@@ -1144,3 +1181,380 @@ document.getElementById('resendSmsOtpLink')?.addEventListener('click', async (e)
   }
 });
 
+// Google OAuth2 Implementation
+let googleConfig = null;
+
+// Load Google OAuth configuration with caching
+const loadGoogleConfig = async () => {
+    if (googleConfig) return googleConfig;
+    try {
+        const { data, status } = await apiCall('/google-config/', null, 'GET');
+        if (status === 200) {
+            googleConfig = data;
+            return data;
+        }
+    } catch (error) {
+        console.error('Failed to load Google config:', error);
+    }
+    return null;
+};
+
+// Handle Google OAuth login
+const handleGoogleLogin = async () => {
+    if (!googleConfig) {
+        await loadGoogleConfig();
+    }
+    
+    if (!googleConfig || !googleConfig.configured) {
+        showMessage('Google OAuth not configured', 'error');
+        return;
+    }
+    
+    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
+        `client_id=${googleConfig.client_id}&` +
+        `redirect_uri=${encodeURIComponent(window.location.href)}&` +
+        `response_type=token&` +
+        `scope=profile email&` +
+        `state=google_login`;
+    
+    window.location.href = authUrl;
+};
+
+// Handle Google OAuth response (for direct redirects)
+const handleGoogleResponse = async (response) => {
+    if (!response.access_token) {
+        showMessage('Google authentication failed', 'error');
+        return;
+    }
+    
+    try {
+        const { data, status } = await apiCall('/social/google/', {
+            access_token: response.access_token
+        });
+        
+        if (status === 200 && data.success) {
+            localStorage.setItem('access_token', data.access);
+            localStorage.setItem('refresh_token', data.refresh);
+            showMessage('Successfully signed in with Google! 🎉', 'success');
+            setTimeout(() => window.location.href = 'dashboard.html', 1500);
+        } else {
+            showMessage(data.message || 'Google authentication failed', 'error');
+        }
+    } catch (error) {
+        console.error('Google login error:', error);
+        showMessage('Failed to authenticate with Google', 'error');
+    }
+};
+
+// Initialize Google Auth
+const initGoogleAuth = async () => {
+    const config = await loadGoogleConfig();
+    if (!config || !config.configured) {
+        console.warn('Google OAuth not configured');
+        return;
+    }
+    
+    const googleBtn = document.getElementById('googleLoginBtn');
+    if (googleBtn) {
+        googleBtn.addEventListener('click', handleGoogleLogin);
+    }
+};
+
+// ===== ACTIVITY LOG FUNCTIONALITY =====
+
+// Show Activity Log Modal
+const showActivityLogModal = () => {
+    document.getElementById('activityLogModal').classList.remove('hidden');
+    document.getElementById('activityResults').classList.add('hidden');
+    document.getElementById('activityLogForm').reset();
+};
+
+// Activity Log Form Handler
+if (document.getElementById('activityLogForm')) {
+    document.getElementById('activityLogForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const email = document.getElementById('userEmail').value.trim();
+        if (!email) {
+            showMessage('Please enter a user email', 'error');
+            return;
+        }
+
+        try {
+            const { data: result, status } = await apiCall('/activity-log/', { email });
+            
+            if (status === 200) {
+                displayActivityLogs(result);
+            } else if (status === 404) {
+                showMessage('User not found', 'error');
+            } else if (status === 403) {
+                showMessage('Access denied. Admin privileges required.', 'error');
+            } else {
+                showMessage(result.error || 'Failed to load activity logs', 'error');
+            }
+        } catch (error) {
+            console.error('Activity log error:', error);
+            showMessage('Error loading activity logs', 'error');
+        }
+    });
+}
+
+// Display Activity Logs
+const displayActivityLogs = (result) => {
+    const userInfo = document.getElementById('userInfo');
+    const activityList = document.getElementById('activityList');
+    const activityResults = document.getElementById('activityResults');
+
+    // Display user info
+    userInfo.innerHTML = `
+        <strong>Activity Log for:</strong> ${result.user}
+    `;
+
+    // Display activity logs
+    if (result.logs && result.logs.length > 0) {
+        activityList.innerHTML = result.logs.map((log, index) => `
+            <div class="activity-item" onclick="toggleActivityDetails(${index})">
+                <div class="activity-main">
+                    <div class="activity-action">
+                        ${getActionIcon(log.action)} ${log.action}
+                        <span class="expand-icon">▼</span>
+                    </div>
+                    <div class="activity-summary">
+                        📍 ${log.location} • 🌐 ${log.ip_address}
+                    </div>
+                    <div class="activity-details hidden" id="details-${index}">
+                        <div class="detail-grid">
+                            <div class="detail-item">
+                                <strong>🕐 Timestamp:</strong>
+                                <span>${new Date(log.timestamp).toLocaleString()}</span>
+                            </div>
+                            <div class="detail-item">
+                                <strong>📍 Location:</strong>
+                                <span>${log.location || 'Unknown'}</span>
+                            </div>
+                            <div class="detail-item">
+                                <strong>🌐 IP Address:</strong>
+                                <span>${log.ip_address || 'Unknown'}</span>
+                            </div>
+                            <div class="detail-item">
+                                <strong>💻 Browser:</strong>
+                                <span>${parseBrowser(log.device)}</span>
+                            </div>
+                            <div class="detail-item">
+                                <strong>🖥️ Full User Agent:</strong>
+                                <span title="${log.device}">${(log.device || 'Unknown').length > 40 ? (log.device || 'Unknown').substring(0, 40) + '...' : (log.device || 'Unknown')}</span>
+                            </div>
+                            <div class="detail-item">
+                                <strong>🔍 Action Type:</strong>
+                                <span>${log.action}</span>
+                            </div>
+                            <div class="detail-item">
+                                <strong>⏰ Time Ago:</strong>
+                                <span>${formatActivityTime(log.timestamp)}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="activity-time">
+                    ${formatActivityTime(log.timestamp)}
+                </div>
+            </div>
+        `).join('');
+    } else {
+        activityList.innerHTML = `
+            <div class="no-activity">
+                <p>No activity logs found for this user.</p>
+            </div>
+        `;
+    }
+
+    // Show results
+    activityResults.classList.remove('hidden');
+};
+
+// Format activity timestamp
+const formatActivityTime = (timestamp) => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    
+    return date.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+};
+
+// Activity Log Quick Search (Optional Enhancement)
+const searchActivityLogs = async (email) => {
+    if (!email || email.length < 3) return;
+    
+    try {
+        const { data: result, status } = await apiCall('/activity-log/', { email });
+        if (status === 200) {
+            return result.logs.length;
+        }
+    } catch (error) {
+        console.error('Quick search error:', error);
+    }
+    return 0;
+};
+
+// Add activity log count to user search (if needed)
+const enhanceUserSearch = async () => {
+    const emailInput = document.getElementById('userEmail');
+    if (emailInput) {
+        emailInput.addEventListener('blur', async (e) => {
+            const email = e.target.value.trim();
+            if (email && email.includes('@')) {
+                const count = await searchActivityLogs(email);
+                if (count > 0) {
+                    emailInput.title = `${count} activity logs found`;
+                }
+            }
+        });
+    }
+};
+
+// Toggle activity details
+const toggleActivityDetails = (index) => {
+    const detailsEl = document.getElementById(`details-${index}`);
+    const activityItem = detailsEl.closest('.activity-item');
+    
+    if (detailsEl.classList.contains('hidden')) {
+        detailsEl.classList.remove('hidden');
+        activityItem.classList.add('expanded');
+    } else {
+        detailsEl.classList.add('hidden');
+        activityItem.classList.remove('expanded');
+    }
+};
+
+// Get action icon
+const getActionIcon = (action) => {
+    const icons = {
+        'Login': '🔐',
+        'Logout': '🚪',
+        'Password Change': '🔑',
+        'Email Change': '📧',
+        'Profile Update': '👤',
+        '2FA Enable': '🛡️',
+        '2FA Disable': '🔓',
+        'Account Block': '🚫',
+        'Account Unblock': '✅',
+        'OTP Request': '📱',
+        'OTP Verify': '✔️'
+    };
+    return icons[action] || '📋';
+};
+
+// Parse browser from user agent
+const parseBrowser = (userAgent) => {
+    if (!userAgent) return 'Unknown';
+    
+    if (userAgent.includes('Chrome/')) return userAgent.match(/Chrome\/([\d.]+)/)?.[0] || 'Chrome';
+    if (userAgent.includes('Firefox/')) return userAgent.match(/Firefox\/([\d.]+)/)?.[0] || 'Firefox';
+    if (userAgent.includes('Safari/') && !userAgent.includes('Chrome')) return 'Safari';
+    if (userAgent.includes('Edge/')) return userAgent.match(/Edge\/([\d.]+)/)?.[0] || 'Edge';
+    
+    return userAgent.length > 50 ? userAgent.substring(0, 50) + '...' : userAgent;
+};
+
+// Show message in modal
+const showModalMessage = (elementId, text, type = 'info') => {
+    const messageEl = document.getElementById(elementId);
+    if (messageEl) {
+        messageEl.textContent = text;
+        messageEl.className = `modal-message ${type}`;
+        messageEl.classList.remove('hidden');
+        setTimeout(() => messageEl.classList.add('hidden'), 5000);
+    }
+};
+
+// Initialize activity log enhancements
+document.addEventListener('DOMContentLoaded', () => {
+    if (window.location.pathname.includes('admin.html')) {
+        enhanceUserSearch();
+    }
+});
+
+// ===== SYSTEM STATS FUNCTIONALITY =====
+
+// Show System Stats Modal
+async function showStatsModal() {
+    const modal = document.getElementById('statsModal');
+    const statsGrid = document.getElementById('systemStats');
+    const loading = document.getElementById('statsLoading');
+    
+    modal.classList.remove('hidden');
+    statsGrid.classList.add('hidden');
+    loading.classList.remove('hidden');
+    
+    try {
+        const response = await fetch('/api/user/system-stats/', {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            updateStatsDisplay(data);
+        } else {
+            throw new Error('Failed to fetch stats');
+        }
+    } catch (error) {
+        console.error('Error fetching stats:', error);
+        showMessage('Failed to load system statistics', 'error');
+        // Show default values on error
+        updateStatsDisplay({
+            total_users: 'N/A',
+            active_users: 'N/A',
+            blocked_users: 'N/A',
+            total_2fa_enabled: 'N/A',
+            total_social_accounts: 'N/A',
+            total_email_verified: 'N/A',
+            total_phone_verified: 'N/A'
+        });
+    } finally {
+        loading.classList.add('hidden');
+        statsGrid.classList.remove('hidden');
+    }
+}
+
+function updateStatsDisplay(data) {
+    document.getElementById('totalUsers').textContent = data.total_users || '0';
+    document.getElementById('activeUsers').textContent = data.active_users || '0';
+    document.getElementById('blockedUsers').textContent = data.blocked_users || '0';
+    document.getElementById('twoFAUsers').textContent = data.total_2fa_enabled || '0';
+    document.getElementById('failedLogins').textContent = data.total_social_accounts || '0';
+    document.getElementById('newSignups').textContent = data.total_email_verified || '0';
+    document.getElementById('phoneVerified').textContent = data.total_phone_verified || '0';
+}
+// ===== MODAL FUNCTIONALITY =====
+
+function closeModal(modalId) {
+    document.getElementById(modalId).classList.add('hidden');
+}
+// User management functions
+const editUser = async (userEmail) => {
+    showMessage(`Edit functionality for ${userEmail} - Feature coming soon`, 'info');
+};
+
+const deleteUser = async (userEmail) => {
+    if (!confirm(`Are you sure you want to delete user: ${userEmail}?`)) {
+        return;
+    }
+    showMessage(`Delete functionality for ${userEmail} - Feature coming soon`, 'info');
+};

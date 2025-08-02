@@ -6,6 +6,7 @@ import secrets
 from twilio.rest import Client
 from django.core.cache import cache
 import random
+import requests
 
 
 def generate_and_send_otp(user, new_email, subject="Verify Email", purpose="verification"):
@@ -50,10 +51,11 @@ def validate_otp(user, new_email, otp_input):
 
 
 def send_otp_via_sms(phone_number: str, otp: str) -> str:
-    client = Client(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_TEST_AUTH_TOKEN)
+    client = Client(settings.TWILIO_ACCOUNT_SID,
+                    settings.TWILIO_TEST_AUTH_TOKEN)
 
     message = client.messages.create(
-        body = f'''\nYour Verification Code is {otp}\nIt is valid for 5 minutes.\n''',
+        body=f'''\nYour Verification Code is {otp}\nIt is valid for 5 minutes.\n''',
         from_=settings.TWILIO_TEST_NUMBER,
         to=phone_number
     )
@@ -71,7 +73,7 @@ def generate_and_send_sms_otp(phone_number):
 
     # --- Then check for cooldown again (race condition safe) ---
     if cache.get(COOLDOWN_KEY):
-        raise Exception ("OTP already sent. Try after some time.")
+        raise Exception("OTP already sent. Try after some time.")
 
     otp = str(random.randint(100000, 999999))
 
@@ -80,3 +82,43 @@ def generate_and_send_sms_otp(phone_number):
 
     send_otp_via_sms(phone_number, otp)
     return otp
+
+
+def get_location_from_ip(ip_address):
+    if not ip_address or ip_address in ['127.0.0.1', '::1', 'localhost']:
+        return 'Local'
+
+    cache_key = f"location_{ip_address}"
+    cached_location = cache.get(cache_key)
+    if cached_location:
+        return cached_location
+
+    try:
+        response = requests.get(
+            f'https://ipinfo.io/{ip_address}/json',
+            headers={'User-Agent': 'Mozilla/5.0'},
+            timeout=3
+        )
+        if response.status_code == 200:
+            data = response.json()
+            location = f"{data.get('city', 'Unknown')}, {data.get('country', 'Unknown')}"
+            cache.set(cache_key, location, timeout=86400)
+            return location
+    except:
+        pass
+    return "Unknown"
+
+
+def log_activity(user, action, request=None):
+    from core.models import ActivityLog
+    ip = request.META.get('REMOTE_ADDR') if request else None
+    location = get_location_from_ip(ip) if ip else 'Unknown'
+
+    ActivityLog.objects.create(
+        user=user,
+        action=action,
+        ip_address=ip,
+        user_device=request.META.get('HTTP_USER_AGENT', '')[
+            :255] if request else '',
+        location=location,
+    )

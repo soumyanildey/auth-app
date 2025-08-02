@@ -1,41 +1,51 @@
 from django.urls import path
 from . import views
 from rest_framework_simplejwt.views import TokenRefreshView
+
 app_name = 'user'
+
 urlpatterns = [
+    # User Management
     path('create/', views.CreateUserView.as_view(), name='create'),
     path('me/', views.UpdateUserView.as_view(), name='me'),
     path('delete/', views.DeleteUserView.as_view(), name='delete'),
+
+    # Authentication
     path('token/', views.CustomTokenObtainPairView.as_view(), name='token'),
     path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('logout/', views.LogoutView.as_view(), name='logout'),
+
+    # Admin Access
     path('admin/', views.AdminUserView.as_view(), name='admin'),
     path('superadmin/', views.SuperAdminUserView.as_view(), name='superadmin'),
-    path('logout/', views.LogoutView.as_view(), name='logout'),
-    path('request-email-otp/', views.RequestEmailOTPView.as_view(),
-         name='request-email-otp'),
-    path('verify-email-otp/', views.ConfirmEmailOTPView.as_view(),
-         name='verify-email-otp'),
-    path('public_test-throttle', views.PublicThrottleTest.as_view(),
-         name='public_throttle_test'),
-    path('private_test-throttle', views.PrivateThrottleTest.as_view(),
-         name='private_throttle_test'),
-    path('password_change_with_old_password',
-         views.PasswordChangeWithOldPasswordView.as_view(), name="passchange"),
+    path('unblock_user', views.UnblockUserView.as_view(), name='unblock_user'),
+
+    # Password Management
+    path('password_change_with_old_password', views.PasswordChangeWithOldPasswordView.as_view(), name="passchange"),
+    path('password_reset/', views.PasswordResetRequest.as_view(), name='password_reset'),
+    path('password_reset_confirm/', views.PasswordResetConfirm.as_view(), name='password_reset_confirm'),
+
+    # Two-Factor Authentication
     path('enable_2fa', views.Enable2FAA.as_view(), name='enable_2fa'),
     path('verify_2fa', views.Verify2FA.as_view(), name='verify_2fa'),
-    path('cancel_2fa_setup', views.Cancel2FASetupView.as_view(),
-         name='cancel_2fa_setup'),
-    path('unblock_user', views.UnblockUserView.as_view(), name='unblock_user'),
-    path('public-email-verify/', views.PublicEmailVerify.as_view(),
-         name='public_email_verify'),
-    path('public-resend-otp/', views.PublicResendOTP.as_view(),
-         name='public_resend_otp'),
-    path('password_reset/', views.PasswordResetRequest.as_view(),
-         name='password_reset'),
-    path('password_reset_confirm/', views.PasswordResetConfirm.as_view(),
-         name='password_reset_confirm'),
-    path('request-sms-otp/', views.SendPhoneOTPView.as_view(),
-         name='request-sms-otp'),
-    path('verify-sms-otp/', views.ConfirmPhoneOTPView.as_view(),
-         name='verify-sms-otp'),
+    path('cancel_2fa_setup', views.Cancel2FASetupView.as_view(), name='cancel_2fa_setup'),
+
+    # OTP Verification
+    path('request-email-otp/', views.RequestEmailOTPView.as_view(), name='request-email-otp'),
+    path('verify-email-otp/', views.ConfirmEmailOTPView.as_view(), name='verify-email-otp'),
+    path('request-sms-otp/', views.SendPhoneOTPView.as_view(), name='request-sms-otp'),
+    path('verify-sms-otp/', views.ConfirmPhoneOTPView.as_view(), name='verify-sms-otp'),
+    path('public-email-verify/', views.PublicEmailVerify.as_view(), name='public_email_verify'),
+    path('public-resend-otp/', views.PublicResendOTP.as_view(), name='public_resend_otp'),
+
+    # Social Authentication
+    path('google-config/', views.GoogleConfigView.as_view(), name='google_config'),
+    path('social/google/', views.GoogleLoginView.as_view(), name='google_login'),
+
+    # System & Testing
+    path('activity-log/', views.ActivityLogView.as_view(), name='activity_log'),
+    path('public_test-throttle', views.PublicThrottleTest.as_view(), name='public_throttle_test'),
+    path('private_test-throttle', views.PrivateThrottleTest.as_view(), name='private_throttle_test'),
+    path('system-stats/', views.SystemStatsView.as_view(), name='system_stats'),
 ]
+

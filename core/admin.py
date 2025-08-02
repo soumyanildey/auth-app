@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.utils.translation import gettext_lazy as _
-from .models import CustomUser, EmailOTP, PasswordHistory
+from .models import CustomUser, EmailOTP, PasswordHistory, ActivityLog
 
 
 @admin.register(CustomUser)
@@ -38,7 +38,7 @@ class CustomUserAdmin(BaseUserAdmin):
         }),
         (_('Security & Device Info'), {
             'fields': (
-                'last_ip', 'last_device', 'last_login_location',
+                
                 'failed_login_attempts', 'last_failed_login'
             )
         }),
@@ -86,3 +86,6 @@ class PasswordHistoryAdmin(admin.ModelAdmin):
     list_filter = ('changed_at',)
     search_fields = ('user__email',)
     readonly_fields = ('changed_at',)
+
+
+admin.site.register(ActivityLog)

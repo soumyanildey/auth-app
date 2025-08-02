@@ -21,7 +21,7 @@ from django.utils import timezone
 import datetime
 from django.db import transaction
 import secrets
-from .utils import generate_and_send_otp, validate_otp, generate_and_send_sms_otp
+from .utils import generate_and_send_otp, validate_otp, generate_and_send_sms_otp, log_activity
 from django.contrib.auth.hashers import check_password
 import base64
 import io
@@ -30,6 +30,9 @@ import qrcode
 from django.utils.http import urlsafe_base64_encode
 from django.utils.encoding import force_bytes
 from django.contrib.auth.tokens import default_token_generator
+from allauth.socialaccount.models import SocialAccount
+import requests
+from django.shortcuts import redirect
 
 
 def check_account_lockout(user):
@@ -63,6 +66,7 @@ class CreateUserView(generics.CreateAPIView):
     def perform_create(self, serializer):
         # User active by default, email needs verification
         user = serializer.save(is_email_verified=False)
+        log_activity(user, 'profile_update', self.request)
         generate_and_send_otp(
             user, user.email, subject="Verify Your Email", purpose="registration")
 
@@ -75,6 +79,10 @@ class UpdateUserView(generics.RetrieveUpdateAPIView):
     def get_object(self):
         '''Update current user instance'''
         return self.request.user
+
+    def perform_update(self, serializer):
+        serializer.save()
+        log_activity(self.request.user, 'profile_update', self.request)
 
 
 class DeleteUserView(generics.DestroyAPIView):
@@ -92,16 +100,43 @@ class AdminUserView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = UserSerializer
     permission_classes = [
         permissions.IsAuthenticated, custom_permissions.IsAdmin]
-    queryset = get_user_model().objects.exclude(
-        role__in=['superadmin', 'admin'])
+    queryset = get_user_model().objects.filter(role='user')
+    
+    def get(self, request, pk=None, *args, **kwargs):
+        if pk:
+            return super().get(request, *args, **kwargs)
+        # List users only
+        users = self.get_queryset()
+        serializer = self.serializer_class(users, many=True)
+        return Response(serializer.data)
+    
+    def put(self, request, pk=None, *args, **kwargs):
+        return Response({'error': 'Update not allowed'}, status=405)
+    
+    def patch(self, request, pk=None, *args, **kwargs):
+        return Response({'error': 'Update not allowed'}, status=405)
 
 
 class SuperAdminUserView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = UserSerializer
     permission_classes = [permissions.IsAuthenticated,
                           custom_permissions.IsSuperAdmin]
-    queryset = get_user_model().objects.all()
+    queryset = get_user_model().objects.filter(role='user')
     lookup_field = 'pk'
+    
+    def get(self, request, pk=None, *args, **kwargs):
+        if pk:
+            return super().get(request, *args, **kwargs)
+        # List users only
+        users = self.get_queryset()
+        serializer = self.serializer_class(users, many=True)
+        return Response(serializer.data)
+    
+    def put(self, request, pk=None, *args, **kwargs):
+        return Response({'error': 'Update not allowed'}, status=405)
+    
+    def patch(self, request, pk=None, *args, **kwargs):
+        return Response({'error': 'Update not allowed'}, status=405)
 
 
 class CustomTokenObtainPairView(TokenObtainPairView):
@@ -126,7 +161,17 @@ class CustomTokenObtainPairView(TokenObtainPairView):
 
             except get_user_model().DoesNotExist:
                 pass
-        return super().post(request, *args, **kwargs)
+        response = super().post(request, *args, **kwargs)
+        if response.status_code == 200 and 'access' in response.data:
+            # Login successful, get user from email
+            email = request.data.get('email')
+            if email:
+                try:
+                    user = get_user_model().objects.get(email=email)
+                    log_activity(user, 'login', request)
+                except get_user_model().DoesNotExist:
+                    pass
+        return response
 
 
 class LogoutView(APIView):
@@ -136,6 +181,7 @@ class LogoutView(APIView):
 
     def post(self, request):
         try:
+            log_activity(request.user, 'logout', request)
             logout(request)
             refresh_token = request.data['refresh']
             token = RefreshToken(refresh_token)
@@ -176,6 +222,7 @@ class RequestEmailOTPView(APIView):
 
                 generate_and_send_otp(
                     request.user, new_email, subject="Change Email OTP", purpose="change_email")
+                log_activity(request.user, 'otp_request', request)
 
             return Response({'message': 'OTP sent to new E-Mail'}, status=200)
         return Response(serializer.errors, status=400)
@@ -208,6 +255,7 @@ class ConfirmEmailOTPView(APIView):
                 user.email = new_email
                 user.is_email_verified = True
                 user.save(update_fields=['email', 'is_email_verified'])
+                log_activity(user, 'email_change', request)
 
                 if result:
                     result.delete()  # Delete OTP record
@@ -243,6 +291,7 @@ class PublicEmailVerify(APIView):
                 if not user.is_email_verified:
                     user.is_email_verified = True
                     user.save(update_fields=['is_email_verified'])
+                    log_activity(user, 'otp_verify', request)
 
                 if result:
                     result.delete()
@@ -266,6 +315,7 @@ class PublicResendOTP(APIView):
 
         generate_and_send_otp(
             user, email, subject="Verify Your Email", purpose="registration")
+        log_activity(user, 'otp_request', request)
         return Response({'message': 'OTP sent successfully'}, status=200)
 
 
@@ -299,6 +349,7 @@ class PasswordChangeWithOldPasswordView(APIView):
                     user.set_password(new_pass)
                     # Only update password field
                     user.save(update_fields=['password'])
+                    log_activity(user, 'password_change', request)
 
                     return Response({'success': 'Successfully Password Changed.'}, status=200)
 
@@ -396,6 +447,7 @@ class Verify2FA(APIView):
                         # Enable 2FA only after successful verification
                         user.is_2fa_enabled = True
                         user.save(update_fields=['is_2fa_enabled'])
+                        log_activity(user, '2fa_enable', request)
                         return Response({"success": "2FA enabled successfully."}, status=status.HTTP_200_OK)
                     else:
                         return Response({"error": "Invalid or expired OTP."}, status=status.HTTP_400_BAD_REQUEST)
@@ -442,6 +494,7 @@ class UnblockUserView(APIView):
                     email=serializer.validated_data['email'])
                 user.is_blocked = False
                 user.save(update_fields=['is_blocked'])
+                log_activity(user, 'account_unblock', request)
                 return Response({'success': f'Successfully Unblocked User with E-Mail {user.email}'}, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({'error': f'Error:{str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -546,6 +599,7 @@ class SendPhoneOTPView(APIView):
 
         try:
             generate_and_send_sms_otp(phone)
+            log_activity(user, 'otp_request', request)
         except Exception as e:
             return Response({'detail': str(e)}, status=status.HTTP_429_TOO_MANY_REQUESTS)
 
@@ -578,6 +632,7 @@ class ConfirmPhoneOTPView(APIView):
 
                 user.is_phone_verified = True
                 user.save(update_fields=['is_phone_verified'])
+                log_activity(user, 'otp_verify', request)
 
                 return Response({'success': 'Phone Verified Successfully.'}, status=status.HTTP_200_OK)
 
@@ -585,3 +640,167 @@ class ConfirmPhoneOTPView(APIView):
             return Response({'detail': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             return Response({"detail": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class GoogleConfigView(APIView):
+    '''API endpoint to serve Google OAuth configuration to frontend'''
+
+    def get(self, request):
+        client_id = getattr(settings, 'GOOGLE_OAUTH2_CLIENT_ID', '')
+        configured = bool(client_id and client_id.strip())
+
+        return Response({
+            'client_id': client_id if configured else 'demo-client-id',
+            'configured': configured,
+            'demo_mode': not configured
+        })
+
+
+class GoogleLoginView(APIView):
+    '''Login APIView for google login'''
+
+    def post(self, request):
+        access_token = request.data.get('access_token')
+        if not access_token:
+            return Response({
+                'error': 'Google access token is required to continue',
+                'message': 'Please provide a valid Google access token'
+            }, status=400)
+
+        try:
+            response = requests.get(
+                f'https://www.googleapis.com/oauth2/v2/userinfo?access_token={access_token}',
+                timeout=10
+            )
+            if response.status_code != 200:
+                return Response({
+                    'error': 'Google authentication failed',
+                    'message': 'The provided access token is invalid or expired. Please try signing in with Google again.'
+                }, status=400)
+
+            data = response.json()
+
+            # Validate required fields
+            if 'email' not in data or 'id' not in data:
+                return Response({
+                    'error': 'Incomplete Google profile',
+                    'message': 'Your Google account is missing required information. Please ensure your Google account has an email address.'
+                }, status=400)
+
+            with transaction.atomic():
+                try:
+                    user = get_user_model().objects.select_for_update().get(
+                        email=data['email'])
+
+                    # Check if user is blocked before proceeding
+                    if user.is_blocked:
+                        return Response({
+                            'error': 'Account blocked',
+                            'message': 'Your account has been blocked. Please contact support for assistance.'
+                        }, status=423)
+
+                    from allauth.socialaccount.models import SocialAccount
+                    SocialAccount.objects.get_or_create(
+                        user=user, provider='google', defaults={'uid': data['id']}
+                    )
+                except get_user_model().DoesNotExist:
+                    user = get_user_model().objects.create_user(
+                        email=data['email'],
+                        fname=data.get('given_name', ''),
+                        lname=data.get('family_name', ''),
+                        phone='',
+                        is_email_verified=True
+                    )
+                    from allauth.socialaccount.models import SocialAccount
+                    SocialAccount.objects.create(
+                        user=user,
+                        provider='google',
+                        uid=data['id']
+                    )
+
+                lockout_response = check_account_lockout(user)
+                if lockout_response:
+                    return lockout_response
+
+                refresh = RefreshToken.for_user(user)
+                log_activity(user, 'login', request)
+                return Response({
+                    'success': True,
+                    'message': 'Successfully signed in with Google',
+                    'access': str(refresh.access_token),
+                    'refresh': str(refresh)
+                })
+
+        except requests.exceptions.Timeout:
+            return Response({
+                'error': 'Connection timeout',
+                'message': 'Google authentication timed out. Please check your internet connection and try again.'
+            }, status=400)
+        except requests.exceptions.ConnectionError:
+            return Response({
+                'error': 'Connection failed',
+                'message': 'Unable to connect to Google services. Please check your internet connection and try again.'
+            }, status=400)
+        except (ValueError, KeyError):
+            return Response({
+                'error': 'Invalid response from Google',
+                'message': 'Received invalid data from Google. Please try signing in again.'
+            }, status=400)
+        except Exception:
+            return Response({
+                'error': 'Authentication failed',
+                'message': 'An unexpected error occurred during Google sign-in. Please try again.'
+            }, status=400)
+
+
+class ActivityLogView(APIView):
+    '''Admin view to get any user's activity log by email'''
+    permission_classes = [
+        permissions.IsAuthenticated, custom_permissions.IsAdmin]
+
+    def post(self, request):
+        email = request.data.get('email')
+        if not email:
+            return Response({'error': 'Email is required'}, status=400)
+
+        try:
+            user = get_user_model().objects.get(email=email)
+        except get_user_model().DoesNotExist:
+            return Response({'error': 'User not found'}, status=404)
+
+        from core.models import ActivityLog
+        logs = ActivityLog.objects.filter(user=user)[:20]
+        data = [{
+            'action': log.get_action_display(),
+            'timestamp': log.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
+            'ip_address': log.ip_address or 'Unknown',
+            'location': log.location or 'Unknown',
+            'device': log.user_device[:50] + '...' if len(log.user_device) > 50 else log.user_device
+        } for log in logs]
+        return Response({
+            'user': f"{user.get_full_name} ({user.email})",
+            'logs': data
+        })
+
+
+class SystemStatsView(APIView):
+    '''APIView for system stats'''
+    permission_classes = [permissions.IsAuthenticated, custom_permissions.IsAdmin]
+
+    def get(self,request):
+        total_users = get_user_model().objects.count()
+        active_users = get_user_model().objects.filter(is_active=True).count()
+        blocked_users = get_user_model().objects.filter(is_blocked=True).count()
+        total_social_accounts = SocialAccount.objects.count()
+        total_2fa_enabled = get_user_model().objects.filter(is_2fa_enabled=True).count()
+        total_email_verified = get_user_model().objects.filter(is_email_verified=True).count()
+        total_phone_verified = get_user_model().objects.filter(is_phone_verified=True).count()
+        return Response({
+            'total_users': total_users,
+            'active_users': active_users,
+            'blocked_users': blocked_users,
+            'total_social_accounts': total_social_accounts,
+            'total_2fa_enabled': total_2fa_enabled,
+            'total_email_verified': total_email_verified,
+            'total_phone_verified': total_phone_verified
+        }, status=200)

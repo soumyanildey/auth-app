@@ -43,6 +43,14 @@
                         <button class="btn-secondary" onclick="showStatsModal()">View</button>
                     </div>
 
+                    <!-- Activity Logs -->
+                    <div class="dashboard-card">
+                        <div class="card-icon">📋</div>
+                        <h3>Activity Logs</h3>
+                        <p>View user activity history</p>
+                        <button class="btn-secondary" onclick="showActivityLogModal()">View Logs</button>
+                    </div>
+
                     <!-- API Testing -->
                     <div class="dashboard-card">
                         <div class="card-icon">🧪</div>
@@ -78,31 +86,469 @@
 
     <!-- Users List Modal -->
     <div id="usersModal" class="modal hidden">
-        <div class="modal-content" style="max-width: 600px;">
-            <h3>User Management</h3>
-            <div id="usersList">
-                <p>Loading users...</p>
+        <div class="modal-content" style="max-width: 800px;">
+            <div class="modal-header">
+                <h3>👥 User Management</h3>
+                <button class="close-btn" onclick="closeModal('usersModal')">&times;</button>
             </div>
-            <button class="btn-secondary" onclick="closeModal('usersModal')">Close</button>
+            <div class="users-container">
+                <div class="users-header">
+                    <div class="role-indicator" id="roleIndicator">Loading...</div>
+                    <div class="users-count" id="usersCount">0 users</div>
+                </div>
+                <div id="usersList" class="users-list">
+                    <div class="loading-users">
+                        <div class="loading-spinner"></div>
+                        <p>Loading users...</p>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
     <!-- Stats Modal -->
     <div id="statsModal" class="modal hidden">
-        <div class="modal-content">
-            <h3>System Statistics</h3>
-            <div id="systemStats">
-                <p><strong>Total Users:</strong> <span id="totalUsers">-</span></p>
-                <p><strong>Active Users:</strong> <span id="activeUsers">-</span></p>
-                <p><strong>Blocked Users:</strong> <span id="blockedUsers">-</span></p>
-                <p><strong>2FA Enabled:</strong> <span id="twoFAUsers">-</span></p>
+        <div class="modal-content stats-modal">
+            <div class="modal-header">
+                <h3>📊 System Statistics</h3>
+                <button class="close-btn" onclick="closeModal('statsModal')">&times;</button>
             </div>
-            <button class="btn-secondary" onclick="closeModal('statsModal')">Close</button>
+            <div id="systemStats" class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon">👥</div>
+                    <div class="stat-info">
+                        <span class="stat-value" id="totalUsers">-</span>
+                        <span class="stat-label">Total Users</span>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">🟢</div>
+                    <div class="stat-info">
+                        <span class="stat-value" id="activeUsers">-</span>
+                        <span class="stat-label">Active Today</span>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">🔒</div>
+                    <div class="stat-info">
+                        <span class="stat-value" id="blockedUsers">-</span>
+                        <span class="stat-label">Blocked Users</span>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">🛡️</div>
+                    <div class="stat-info">
+                        <span class="stat-value" id="twoFAUsers">-</span>
+                        <span class="stat-label">2FA Enabled</span>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">🔗</div>
+                    <div class="stat-info">
+                        <span class="stat-value" id="failedLogins">-</span>
+                        <span class="stat-label">Social Accounts</span>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">✅</div>
+                    <div class="stat-info">
+                        <span class="stat-value" id="newSignups">-</span>
+                        <span class="stat-label">Email Verified</span>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">📱</div>
+                    <div class="stat-info">
+                        <span class="stat-value" id="phoneVerified">-</span>
+                        <span class="stat-label">Phone Verified</span>
+                    </div>
+                </div>
+            </div>
+            <div class="stats-loading hidden" id="statsLoading">
+                <div class="loading-spinner"></div>
+                <p>Loading statistics...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Activity Log Modal -->
+    <div id="activityLogModal" class="modal hidden">
+        <div class="modal-content" style="max-width: 800px;">
+            <h3>User Activity Logs</h3>
+            <form id="activityLogForm" class="auth-form">
+                <div class="form-group">
+                    <label for="userEmail">Enter User Email</label>
+                    <input type="email" id="userEmail" name="email" placeholder="user@example.com" required>
+                </div>
+                <button type="submit" class="btn-primary">View Activity</button>
+            </form>
+            
+            <div id="activityResults" class="hidden">
+                <hr>
+                <div id="userInfo" class="user-info"></div>
+                <div id="activityList" class="activity-list"></div>
+            </div>
+            
+            <div class="modal-actions">
+                <button class="btn-secondary" onclick="closeModal('activityLogModal')">Close</button>
+            </div>
         </div>
     </div>
 
     <div id="message" class="message hidden"></div>
 
     <script src="/static/js/auth.js"></script>
+    
+
+    
+    <style>
+        .activity-list {
+            max-height: 400px;
+            overflow-y: auto;
+            margin-top: 15px;
+        }
+        
+        .activity-item {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .activity-item:hover {
+            background: #e9ecef;
+        }
+        
+        .activity-main {
+            flex: 1;
+        }
+        
+        .activity-action {
+            font-weight: 600;
+            color: #495057;
+            margin-bottom: 4px;
+        }
+        
+        .activity-details {
+            font-size: 0.9em;
+            color: #6c757d;
+        }
+        
+        .activity-time {
+            font-size: 0.85em;
+            color: #868e96;
+            text-align: right;
+            min-width: 120px;
+        }
+        
+        .user-info {
+            background: #e3f2fd;
+            border: 1px solid #bbdefb;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 15px;
+            font-weight: 500;
+            color: #1565c0;
+        }
+        
+        .no-activity {
+            text-align: center;
+            color: #6c757d;
+            padding: 40px;
+            font-style: italic;
+        }
+        
+        .activity-item {
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .activity-summary {
+            font-size: 0.9em;
+            color: #6c757d;
+            margin-top: 4px;
+        }
+        
+        .expand-icon {
+            float: right;
+            transition: transform 0.2s ease;
+            font-size: 0.8em;
+        }
+        
+        .activity-item.expanded .expand-icon {
+            transform: rotate(180deg);
+        }
+        
+        .detail-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-top: 12px;
+            padding: 12px;
+            background: #ffffff;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+        }
+        
+        .detail-item {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        
+        .detail-item strong {
+            font-size: 0.85em;
+            color: #495057;
+        }
+        
+        .detail-item span {
+            font-size: 0.9em;
+            color: #6c757d;
+            word-break: break-all;
+        }
+        
+        /* Users Management Styles */
+        .users-container {
+            padding: 20px;
+        }
+        
+        .users-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
+        }
+        
+        .role-indicator {
+            font-weight: 600;
+            color: #495057;
+        }
+        
+        .users-count {
+            font-size: 0.9em;
+            color: #6c757d;
+        }
+        
+        .users-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .user-card {
+            background: white;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 10px;
+            transition: all 0.2s ease;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .user-card:hover {
+            border-color: #667eea;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
+        
+        .user-main {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .user-info {
+            flex: 1;
+        }
+        
+        .user-name {
+            font-weight: 600;
+            color: #495057;
+            margin-bottom: 4px;
+        }
+        
+        .user-details {
+            font-size: 0.9em;
+            color: #6c757d;
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .user-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.8em;
+            font-weight: 500;
+        }
+        
+        .role-user { background: #e3f2fd; color: #1565c0; }
+        .role-admin { background: #fff3e0; color: #ef6c00; }
+        .role-superadmin { background: #fce4ec; color: #c2185b; }
+        .role-moderator { background: #f3e5f5; color: #7b1fa2; }
+        
+        .status-active { color: #2e7d32; }
+        .status-blocked { color: #d32f2f; }
+        
+        .loading-users {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 40px;
+            gap: 15px;
+        }
+        
+        .user-actions {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .btn-action {
+            background: none;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            padding: 6px 10px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s ease;
+        }
+        
+        .btn-action.edit:hover {
+            background: #e3f2fd;
+            border-color: #2196f3;
+        }
+        
+        .btn-action.delete:hover {
+            background: #ffebee;
+            border-color: #f44336;
+        }
+        
+        /* Stats Modal Styles */
+        .stats-modal {
+            max-width: 700px;
+            padding: 0;
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 25px;
+            border-bottom: 1px solid #e9ecef;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 12px 12px 0 0;
+        }
+        
+        .modal-header h3 {
+            margin: 0;
+            font-size: 1.4em;
+        }
+        
+        .close-btn {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            padding: 0;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            transition: background-color 0.2s;
+        }
+        
+        .close-btn:hover {
+            background-color: rgba(255, 255, 255, 0.2);
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            padding: 25px;
+        }
+        
+        .stat-card {
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            border: 1px solid #dee2e6;
+            border-radius: 12px;
+            padding: 20px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        
+        .stat-icon {
+            font-size: 2em;
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: white;
+            border-radius: 50%;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .stat-info {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        
+        .stat-value {
+            font-size: 1.8em;
+            font-weight: 700;
+            color: #495057;
+            line-height: 1;
+        }
+        
+        .stat-label {
+            font-size: 0.9em;
+            color: #6c757d;
+            font-weight: 500;
+        }
+        
+        .stats-loading {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 40px;
+            gap: 15px;
+        }
+        
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
 </body>
 </html>

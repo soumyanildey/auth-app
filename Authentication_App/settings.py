@@ -31,7 +31,7 @@ SECRET_KEY = config('SECRET_KEY')
 DEBUG = config('DEBUG', default=False, cast=bool)
 
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'secureauth-q1kz.onrender.com']
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'testserver', 'secureauth-q1kz.onrender.com']
 APPEND_SLASH = True
 
 
@@ -50,8 +50,19 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt.token_blacklist',
     'drf_spectacular',
     'corsheaders',
+    'user',
+    # Required for allauth
+    "django.contrib.sites",
+
+    "allauth",
+    "allauth.account",
+    "allauth.socialaccount",
+
+    "allauth.socialaccount.providers.google",
 
 ]
+
+SITE_ID = 1
 
 
 MIDDLEWARE = [
@@ -62,6 +73,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'allauth.account.middleware.AccountMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -86,15 +98,26 @@ TEMPLATES = [
 WSGI_APPLICATION = 'Authentication_App.wsgi.application'
 
 
-CACHES = {
-  "default": {
-    "BACKEND": "django_redis.cache.RedisCache",
-    "LOCATION": config("REDIS_URL"),
-    "OPTIONS": {
-      "CLIENT_CLASS": "django_redis.client.DefaultClient",
+if DEBUG:
+    CACHES = {
+        "default": {
+            "BACKEND": "django_redis.cache.RedisCache",
+            "LOCATION": "redis://127.0.0.1:6379/1",
+            "OPTIONS": {
+                "CLIENT_CLASS": "django_redis.client.DefaultClient",
+            }
+        }
     }
-  }
-}
+else:
+    CACHES = {
+        "default": {
+            "BACKEND": "django_redis.cache.RedisCache",
+            "LOCATION": config("REDIS_URL"),
+            "OPTIONS": {
+                "CLIENT_CLASS": "django_redis.client.DefaultClient",
+            }
+        }
+    }
 
 
 
@@ -124,41 +147,67 @@ SIMPLE_JWT = {
 }
 
 
+# OAuth Configuration
+AUTHENTICATION_BACKENDS = [
+    'django.contrib.auth.backends.ModelBackend',
+    'allauth.account.auth_backends.AuthenticationBackend',
+]
+
+ACCOUNT_LOGIN_METHODS = {'email'}
+ACCOUNT_SIGNUP_FIELDS = ['email*', 'password1*', 'password2*']
+ACCOUNT_EMAIL_VERIFICATION = 'mandatory'
+
+SOCIALACCOUNT_PROVIDERS = {
+    'google': {
+        'SCOPE': ['profile', 'email'],
+        'OAUTH_PKCE_ENABLED': True,
+    },
+
+}
+
+
+
+
+
+
+
+
+
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
 DATABASES = {}
 
-# if 'test' in sys.argv or 'pytest' in sys.modules:
-#     DATABASES['default'] = {
-#         'ENGINE': 'django.db.backends.postgresql',
-#         'NAME': config('TEST_DB_NAME'),
-#         'USER': config('TEST_DB_USER'),
-#         'PASSWORD': config('TEST_DB_PASSWORD'),
-#         'HOST': config('TEST_DB_HOST'),
-#         'PORT': config('TEST_DB_PORT'),
-#         'OPTIONS': {
-#             'sslmode': 'disable',
-#         },
-#     }
-# elif config('DEBUG', default=False, cast=bool):
-#     DATABASES['default'] = {
-#         'ENGINE': 'django.db.backends.postgresql',
-#         'NAME': config('DEV_DB_NAME'),
-#         'USER': config('DEV_DB_USER'),
-#         'PASSWORD': config('DEV_DB_PASSWORD'),
-#         'HOST': config('DEV_DB_HOST'),
-#         'PORT': config('DEV_DB_PORT'),
-#         'OPTIONS': {
-#             'sslmode': 'disable',
-#         },
-#     }
-# else:
-DATABASES['default'] = dj_database_url.config(
-        default=config('DATABASE_URL'),
-        conn_max_age=600,
-        ssl_require=True
-    )
+if 'test' in sys.argv or 'pytest' in sys.modules:
+    DATABASES['default'] = {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': config('TEST_DB_NAME'),
+        'USER': config('TEST_DB_USER'),
+        'PASSWORD': config('TEST_DB_PASSWORD'),
+        'HOST': config('TEST_DB_HOST'),
+        'PORT': config('TEST_DB_PORT'),
+        'OPTIONS': {
+            'sslmode': 'disable',
+        },
+    }
+elif config('DEBUG', default=False, cast=bool):
+    DATABASES['default'] = {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': config('DEV_DB_NAME'),
+        'USER': config('DEV_DB_USER'),
+        'PASSWORD': config('DEV_DB_PASSWORD'),
+        'HOST': config('DEV_DB_HOST'),
+        'PORT': config('DEV_DB_PORT'),
+        'OPTIONS': {
+            'sslmode': 'disable',
+        },
+    }
+else:
+    DATABASES['default'] = dj_database_url.config(
+            default=config('DATABASE_URL'),
+            conn_max_age=600,
+            ssl_require=True
+        )
 
 
 # Password validation
@@ -266,3 +315,10 @@ PASSWORD_RESET_TIMEOUT = 600  # 10 minutes
 TWILIO_ACCOUNT_SID = config('ACCOUNT_SID')
 TWILIO_TEST_AUTH_TOKEN = config('TEST_AUTH_TOKEN')
 TWILIO_TEST_NUMBER = config('TEST_SENDER_NUMBER')
+
+
+
+
+# Add at the end of settings.py:
+GOOGLE_OAUTH2_CLIENT_ID = config('GOOGLE_OAUTH2_CLIENT_ID', default='')
+GOOGLE_OAUTH2_CLIENT_SECRET = config('GOOGLE_OAUTH2_CLIENT_SECRET', default='')
